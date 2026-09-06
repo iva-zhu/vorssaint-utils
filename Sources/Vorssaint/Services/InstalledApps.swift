@@ -193,7 +193,7 @@ enum InstalledApps {
                             isSystem: isSystemApplication(at: url))
     }
 
-    /// A program with no .app bundle (the Java a game launcher starts, issue #865)
+    /// A program with no .app bundle (a runtime a game launcher starts, issue #865)
     /// is listed only for lists that store path identities, because a list that
     /// takes only apps would drop the pick silently and show a row that does nothing.
     static func runningApplication(activationPolicy: NSApplication.ActivationPolicy,

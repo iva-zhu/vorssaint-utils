@@ -20106,8 +20106,8 @@ struct MetricsTests {
                "a path outside home keeps its absolute directory")
 
         // Running programs that are not packaged as apps (issue #865): a bare
-        // executable run under .regular activation policy (e.g. a Minecraft
-        // launcher's Java process) answers to its resolved file path when it
+        // executable run under .regular activation policy (e.g. a game
+        // launcher's runtime process) answers to its resolved file path when it
         // has no bundle identifier, while an ordinary .app bundle keeps its
         // bundle row and background/accessory processes stay excluded.
         let runningTestRoot = FileManager.default.temporaryDirectory

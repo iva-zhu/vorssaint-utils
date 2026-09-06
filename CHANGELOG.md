@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimalist window previews and Dock middle-click closing, and brings battery details together in Power. It expands capture, window and keyboard controls and improves recording and note safety, resource use, app updates, network readings, readability, localization, mouse responsiveness and reconnection, focus, search, shortcut recovery, file moves and privacy disclosures.
+Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimalist window previews and Dock middle-click closing, and brings battery details together in Power. It expands capture, window and keyboard controls and improves recording and note safety, resource use, app updates, network readings, readability, localization, mouse exceptions, responsiveness and reconnection, focus, search, shortcut recovery, file moves and privacy disclosures.
 
 ### Added
 - Optional minimal previews hide window titles, controls and decoration in the Dock and App Switcher while keeping selection visible.
@@ -51,6 +51,7 @@ Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimal
 - App Switcher restores native shortcuts after crashes even when disabled, and its reverse window shortcut leaves screenshots available. Thanks to @owendaw.
 - Shortcut recording detects system shortcuts even when they have never been customized. Thanks to @owendaw.
 - Mouse acceleration stays disabled after disconnecting and reconnecting a mouse.
+- Mouse exception lists now offer running programs that are not packaged as apps. Thanks to @iltonandrew.
 - Focus follows mouse avoids reactivating the current game window and changing focus while a modifier key or mouse button is held.
 - The App Switcher shows supported alternate app icons without flickering during navigation. Thanks to @EugeneCarldotme and @hash00.
 - Color picking copies the sampled pixel's correct color and shows matching values in the magnifier. Thanks to @MaksimEgorov.
