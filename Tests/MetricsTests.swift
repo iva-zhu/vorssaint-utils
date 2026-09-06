@@ -9420,6 +9420,37 @@ struct MetricsTests {
                "exact minimum size is valid")
         expect(SettingsWindowSupport.isValidContentSize(width: 1000, height: 800),
                "larger size is valid")
+        let fullTourSize = CGSize(width: 600, height: 584)
+        let tourSettingsSize = CGSize(width: 772, height: 750)
+        let wideTourScreen = CGRect(x: -1600, y: 100, width: 1470, height: 900)
+        let wideTourPlacement = SettingsWindowSupport.tourPlacement(
+            settingsSize: tourSettingsSize, tourSize: fullTourSize, visibleFrame: wideTourScreen)
+        expect(!wideTourPlacement.settings.intersects(wideTourPlacement.tour)
+                && wideTourPlacement.settings.maxX < wideTourPlacement.tour.minX,
+               "the complete tour fits beside Settings on a wide display")
+        expect(wideTourScreen.contains(wideTourPlacement.settings)
+                && wideTourScreen.contains(wideTourPlacement.tour),
+               "tour placement respects external displays with offset coordinates")
+        let smallTourScreen = CGRect(x: 0, y: 0, width: 1280, height: 800)
+        let smallTourPlacement = SettingsWindowSupport.tourPlacement(
+            settingsSize: tourSettingsSize, tourSize: fullTourSize, visibleFrame: smallTourScreen)
+        expect(smallTourScreen.contains(smallTourPlacement.settings)
+                && smallTourScreen.contains(smallTourPlacement.tour)
+                && smallTourPlacement.settings.size == tourSettingsSize
+                && smallTourPlacement.tour.size == fullTourSize,
+               "narrow displays keep the complete images and controls on screen without resizing")
+        let tallTourPlacement = SettingsWindowSupport.tourPlacement(
+            settingsSize: tourSettingsSize, tourSize: fullTourSize,
+            visibleFrame: CGRect(x: 200, y: -1700, width: 1000, height: 1600))
+        expect(!tallTourPlacement.settings.intersects(tallTourPlacement.tour)
+                && tallTourPlacement.tour.minY > tallTourPlacement.settings.maxY,
+               "portrait displays stack the tour above Settings when both fit")
+        let oversizedTourPlacement = SettingsWindowSupport.tourPlacement(
+            settingsSize: CGSize(width: 1600, height: 1000), tourSize: fullTourSize,
+            visibleFrame: smallTourScreen)
+        expect(smallTourScreen.contains(oversizedTourPlacement.tour)
+                && oversizedTourPlacement.settings.maxY == smallTourScreen.maxY - 20,
+               "an oversized Settings window cannot push the tour or its own title bar off screen")
         let preferredSettingsFrame = CGRect(x: -50, y: 100, width: 1000, height: 700)
         let overlappingPlacement = SettingsWindowSupport.panelPlacement(
             preferredFrame: preferredSettingsFrame,

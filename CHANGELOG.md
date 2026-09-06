@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimalist window previews and Dock middle-click closing, and brings battery details together in Power. It expands capture, window and keyboard controls and improves recording and note safety, resource use, app updates, network readings, readability, localization, mouse exceptions, responsiveness and reconnection, focus stability, search, shortcut recovery, file moves and privacy disclosures.
+Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimalist window previews and Dock middle-click closing, and brings battery details together in Power. It refines everyday use, expands capture, window and keyboard controls and improves recording and note safety, resource use, app updates, network readings, readability, localization, mouse exceptions, responsiveness and reconnection, focus stability, search, shortcut recovery, file moves and privacy disclosures.
 
 ### Added
 - Optional minimal previews hide window titles, controls and decoration in the Dock and App Switcher while keeping selection visible.
@@ -26,6 +26,7 @@ Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimal
 - Window Layout has a visual map for turning each edge and corner snap area on or off, thanks to @levelupimprovement.
 
 ### Changed
+- General usability and validation reliability improvements.
 - Battery charge, history, temperature, accessory levels and energy-consuming apps move from System to Power, alongside charging, health and remaining time.
 - App updates recognize installer-based and renamed apps, refresh manual searches, and use store identifiers to improve detection.
 - The privacy guide explains developer update requests, which apps they can reveal, and how to turn them off.
