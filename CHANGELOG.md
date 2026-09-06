@@ -7,7 +7,14 @@ All notable changes to this project are documented here. The format follows
 ## [3.3.4] - 2026-09-06
 
 ### Summary
-This hotfix update keeps the CPU temperature reading and the menu bar icon in place after updating, and includes everything from the release it corrects. Window controls, recording tools and everyday shortcuts gain more options, with less background work and stronger protection for saved content.
+Hotfix update for the CPU temperature reading and the menu bar icon. Everything from the previous release is included and listed further down.
+
+### Fixed
+- CPU temperature readings are back on Macs where the System panel had stopped showing them.
+- The menu bar icon stays visible after updating and keeps the spot you arranged.
+
+### Everything from 3.3.3
+Window controls, recording tools and everyday shortcuts gain more options, with less background work and stronger protection for saved content. This stable release brings together the improvements since 3.3.2, including the full beta cycle and the final reliability fixes.
 
 ### Performance
 - Dock previews: 50% shorter default opening wait, from 400 to 200 ms; 60% shorter app-switching wait, from 250 to 100 ms.
@@ -15,7 +22,7 @@ This hotfix update keeps the CPU temperature reading and the menu bar icon in pl
 - Memory and graphics: fewer retained images and icons, more efficient recording effects, and less repeated work when adjusting watermarks or extra brightness.
 - Background activity: fewer unnecessary checks and history writes; unused keyboard and mouse listeners are released when features turn off.
 
-The Dock figures describe configured waits, not total loading time. Battery-life gains and overall CPU, memory or GPU savings have not been measured against the previous stable release.
+The Dock figures describe configured waits, not total loading time. Battery-life gains and overall CPU, memory or GPU savings have not been measured against 3.3.2.
 
 ### Feature highlights
 - Protect against accidental quitting and closing, arrange windows with pointer gestures, and drag Dock previews to move windows.
@@ -75,8 +82,6 @@ The selected changes below cover new options and fixes that affect everyday use.
 - Disk image installation shows progress and offers to remove the download after installing.
 
 ### Fixed
-- CPU temperature readings are back on Macs where the System panel had stopped showing them.
-- The menu bar icon stays visible after updating and keeps the spot you arranged.
 - Typing and shortcuts stay responsive while App Switcher collects windows from slow apps. Thanks to @MaximilianMauroner.
 - Clipboard operations no longer freeze Command Bar or quick tools when copied content stalls. Thanks to @PathGao and @atomsbaza.
 - Clicks and scrolling stay responsive with mouse controls enabled; focus follows mouse respects held keys, buttons and excluded apps. Thanks to @khichinho.
