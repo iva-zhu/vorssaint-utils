@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Summary
+Dock previews, click actions and focus follows mouse work through overlays that let pointer input pass through.
+
+### Fixed
+- Dock previews and click actions work while recording the screen or using overlays that let pointer input pass through.
+- Focus follows mouse keeps working through recording overlays while respecting windows that actually receive input.
+
 ## [3.3.4] - 2026-09-06
 
 ### Summary
