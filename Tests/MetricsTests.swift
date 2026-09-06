@@ -8553,7 +8553,7 @@ struct MetricsTests {
                          isOnScreen: true, isAppHidden: false, isMinimized: false,
                          isFullscreen: false, isOnHiddenSpace: false, frame: .zero)
         }
-        let sameName = switcherItem(title: "Claude", appName: "Claude", windowID: 7)
+        let sameName = switcherItem(title: "Example App", appName: "Example App", windowID: 7)
         expect(sameName.windowDetail(noOpenWindow: "No window") == nil,
                "the header says nothing under an app whose window carries the app's own name")
         let realTitle = switcherItem(title: "Untitled.txt", appName: "TextEdit", windowID: 7)
@@ -8562,7 +8562,7 @@ struct MetricsTests {
         let noWindow = switcherItem(title: "", appName: "Finder", windowID: nil)
         expect(noWindow.windowDetail(noOpenWindow: "No window") == "No window",
                "an app with nothing open still says so")
-        let cased = switcherItem(title: "claude", appName: "Claude", windowID: 7)
+        let cased = switcherItem(title: "example app", appName: "Example App", windowID: 7)
         expect(cased.windowDetail(noOpenWindow: "No window") == nil,
                "the same name in another case is still the same name")
 
@@ -8961,6 +8961,36 @@ struct MetricsTests {
                     liveEntries: liveTable,
                     symbolicHotKeys: nil),
                "a live match needs no plist at all")
+
+        let nativeShortcutRecordingCases: [(GlobalShortcutRole, Int32, GlobalShortcut)] = [
+            (.switcher, 1, .switcherDefault),
+            (.switcher, 2, GlobalShortcut(keyCode: Int64(kVK_Tab), modifiers: [.command, .shift])),
+            (.switcherWindow, 27, .switcherWindowDefault),
+            (.switcherWindow, 220, GlobalShortcut(keyCode: 94, modifiers: [.command, .shift])),
+        ]
+        for (role, id, shortcut) in nativeShortcutRecordingCases {
+            let live = [LiveSystemShortcut(id: id, shortcut: shortcut, enabled: true)]
+            let fallback = systemHotKey(String(id), enabled: true, keyCode: Int(shortcut.keyCode),
+                                        mask: Int(shortcut.modifiers.cgFlags.rawValue))
+            expect(!GlobalShortcut.conflictsWithSystemShortcut(
+                shortcut, liveEntries: live, symbolicHotKeys: nil, role: role),
+                   "the switcher can record its own enabled native shortcut without system takeover")
+            expect(!GlobalShortcut.conflictsWithSystemShortcut(
+                shortcut, liveEntries: [], symbolicHotKeys: fallback, role: role),
+                   "the switcher shortcut exception also respects remapped keys in the fallback table")
+            expect(GlobalShortcut.conflictsWithSystemShortcut(
+                shortcut, liveEntries: live, symbolicHotKeys: fallback, role: .screenshot),
+                   "other tools cannot take the switcher's native shortcuts")
+            let overlapping = live + [LiveSystemShortcut(id: 30, shortcut: shortcut, enabled: true)]
+            expect(GlobalShortcut.conflictsWithSystemShortcut(
+                shortcut, liveEntries: overlapping, symbolicHotKeys: nil, role: role),
+                   "the switcher still reports an unrelated system action assigned to the same keys")
+        }
+        expect(GlobalShortcut.conflictsWithSystemShortcut(
+            .switcherWindowDefault,
+            liveEntries: [LiveSystemShortcut(id: 27, shortcut: .switcherWindowDefault, enabled: true)],
+            symbolicHotKeys: nil, role: .switcher),
+               "the native exception stays scoped to the corresponding switcher action")
 
         expect(UpdateInstallerSupport.progressStepAdvanced(from: nil, to: 0.004),
                "the first known download fraction always publishes")
@@ -13579,7 +13609,8 @@ struct MetricsTests {
                                "isRegularFile", "tempDir", "legacyDir", "root", "uuidString",
                                "storeRoot", "contentsOfDirectory"]
         for path in ["Sources/Vorssaint/Services/Shelf/ShelfService.swift",
-                     "Sources/Vorssaint/Services/QuickTools/RecentCaptureService.swift"] {
+                     "Sources/Vorssaint/Services/QuickTools/RecentCaptureService.swift",
+                     "Sources/Vorssaint/Services/QuickTools/RecentCaptureStore.swift"] {
             let lines = ((try? String(contentsOfFile: path, encoding: .utf8)) ?? "")
                 .components(separatedBy: "\n")
             expect(!lines.isEmpty, "the store source reads back for its deletion check")
@@ -15167,7 +15198,7 @@ struct MetricsTests {
                    "no em-dash in visible menu bar appearance strings (\(language.rawValue))")
             let appUpdateValues = Mirror(reflecting: FeatureStrings.appUpdates(language)).children
                 .compactMap { $0.value as? String }
-            expect(appUpdateValues.count == 39 && appUpdateValues.allSatisfy { !$0.isEmpty },
+            expect(appUpdateValues.count == 40 && appUpdateValues.allSatisfy { !$0.isEmpty },
                    "every app update string is set for \(language.rawValue)")
             expect(appUpdateValues.allSatisfy { !$0.contains("—") },
                    "no em-dash in visible app update strings (\(language.rawValue))")
@@ -18029,6 +18060,7 @@ struct MetricsTests {
         expect(ScreenshotSupport.uniqueFileName("a.png",
                                                 exists: { $0 == "a.png" || $0 == "a 2.png" }) == "a 3.png",
                "numbering keeps walking until a free name")
+        RecentCaptureStoreTests.run { expect($0, $1) }
         let recentID = UUID()
         expect(ScreenshotSupport.isRecentCaptureCacheFileName("\(recentID.uuidString).png")
                 && ScreenshotSupport.isRecentCaptureCacheFileName(
@@ -21402,6 +21434,16 @@ struct MetricsTests {
             operatingSystemVersion: "26.0")
         expect(partialStoreRows.count == 1 && partialStoreRows[0].latestVersion == "2.0",
                "a partial store check still offers the updates it could verify")
+        let uncheckedReader = AppUpdatesSupport.InstalledApp(
+            name: "Reader", bundleID: "reader.example", path: "/Applications/Reader.app",
+            version: "1.0", isFromAppStore: false)
+        expect(AppUpdatesSupport.uncheckedAppNames(
+            partiallyCheckedApps + [uncheckedReader, uncheckedReader],
+            checkedPaths: [partiallyCheckedApps[0].path]) == ["Reader"],
+               "partial checks name only pending apps and coalesce repeated source failures")
+        expect(AppUpdatesSupport.uncheckedAppNames(
+            [uncheckedReader], checkedPaths: [uncheckedReader.path]).isEmpty,
+               "a successful publisher answer removes the app from failed catalog details")
 
         expect(AppUpdatesSupport.storeIDLookupURL(ids: ["123", "456"], country: "BR")?
             .absoluteString.contains("id=123,456") == true

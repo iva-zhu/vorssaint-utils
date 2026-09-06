@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Summary
+Captures stay protected when history cannot be read or saved, and native switcher shortcuts can be recorded consistently. Partial update checks show their results and affected apps.
+
+### Fixed
+- Recent captures preserves stored images when its history cannot be read or saved.
+- App Switcher accepts its native shortcuts when recording them manually, including with system shortcut takeover disabled.
+
+### Changed
+- App Updates shows results from partial checks and names apps whose checks could not be completed.
+
 ## [3.3.3]
 
 ### Summary
