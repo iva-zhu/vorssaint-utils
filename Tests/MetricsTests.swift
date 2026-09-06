@@ -3405,10 +3405,10 @@ struct MetricsTests {
         // decision above is made consciously, never by omission.
         let releasePlist = NSDictionary(contentsOfFile: "Resources/Info.plist")
         let plistVersion = (releasePlist?["CFBundleShortVersionString"] as? String) ?? ""
-        expect(plistVersion == "3.3.3-beta.4",
+        expect(plistVersion == "3.3.3",
                "bumping the app version requires re-deciding the support prompt pin above")
         let plistBuild = (releasePlist?["CFBundleVersion"] as? String) ?? ""
-        expect(plistBuild == "83",
+        expect(plistBuild == "84",
                "every app version needs its own incremented bundle build")
         expect(SupportUpdateIntroInfo.releaseVersion == "3.3.2",
                "the support prompt remains deliberately pinned to 3.3.2")
