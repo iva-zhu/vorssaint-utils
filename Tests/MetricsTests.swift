@@ -20249,6 +20249,11 @@ struct MetricsTests {
                                                         resolvedAt: 10,
                                                         point: CGPoint(x: 101, y: 100), now: 10.2),
                "an answer of nothing only covers the exact spot it was resolved at")
+        expect(MouseAppExceptionSupport.cacheNamesWindow(region: frontWindow.frame, point: pointer)
+                && !MouseAppExceptionSupport.cacheNamesWindow(region: frontWindow.frame,
+                                                              point: CGPoint(x: 380, y: 380))
+                && !MouseAppExceptionSupport.cacheNamesWindow(region: nil, point: pointer),
+               "an expired answer still names its own window, and no other")
 
         // Hold the main queue while a real pointer lookup runs elsewhere. A
         // synchronous hop would miss the deadline even with a cold cache.
@@ -20294,14 +20299,35 @@ struct MetricsTests {
                        "pointer lookups and the queued refresh finish once main is available")
             }
 
+            /// The verdict a tap gets while the app under the pointer has not
+            /// been resolved yet.
+            func verdictWithoutMain(_ point: CGPoint) -> Bool {
+                var verdict = false
+                let answered = DispatchGroup()
+                answered.enter()
+                Thread {
+                    verdict = exceptions.excludesPointerTarget(.middleClick, at: point)
+                    answered.leave()
+                }.start()
+                let deadline = Date().addingTimeInterval(5)
+                while answered.wait(timeout: .now()) != .success, Date() < deadline {
+                    RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+                }
+                return verdict
+            }
+
             queryWithoutMain("cold-cache")
             queryWithoutMain("changed-window")
             Thread.sleep(forTimeInterval: MouseAppExceptionSupport.resolveLifetime)
             queryWithoutMain("expired-cache")
+            expect(verdictWithoutMain(CGPoint(x: -20_000, y: -20_000)),
+                   "an app that cannot be told apart from a listed one keeps the feature's hands off")
             for scope in MouseExceptionScope.allCases { arguments[scope.defaultsKey] = [String]() }
             defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
             exceptions.reload()
             queryWithoutMain("empty-list")
+            expect(!verdictWithoutMain(CGPoint(x: -20_010, y: -20_010)),
+                   "an empty list stands nothing down")
         }
 
         for language in AppLanguage.allCases {

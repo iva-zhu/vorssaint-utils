@@ -121,7 +121,11 @@ final class MouseAppExceptions: ObservableObject {
            sources.contains(pid) {
             return true
         }
-        return MouseAppExceptionSupport.isExcepted(pointerIdentity(at: point), exceptions: exceptions)
+        let answer = pointerIdentity(at: point)
+        // An app cannot be told apart from a listed one while it is unknown,
+        // and a list exists to keep hands off, so hands stay off.
+        guard answer.known else { return true }
+        return MouseAppExceptionSupport.isExcepted(answer.identity, exceptions: exceptions)
     }
 
     /// True when the app under the pointer or the app in front is on this
@@ -138,7 +142,9 @@ final class MouseAppExceptions: ObservableObject {
            sources.contains(pid) {
             return true
         }
-        if MouseAppExceptionSupport.isExcepted(pointerIdentity(at: point), exceptions: exceptions) {
+        let answer = pointerIdentity(at: point)
+        guard answer.known else { return true }
+        if MouseAppExceptionSupport.isExcepted(answer.identity, exceptions: exceptions) {
             return true
         }
         let frontmost = Self.onMain { Self.identity(for: NSWorkspace.shared.frontmostApplication) }
@@ -231,15 +237,18 @@ final class MouseAppExceptions: ObservableObject {
     // MARK: - Resolving
 
     /// What the app that owns the window under the pointer answers to, falling
-    /// back to the app in front when the pointer is over none.
-    private func pointerIdentity(at point: CGPoint) -> String? {
+    /// back to the app in front when the pointer is over none. `known` is false
+    /// only on the pointer thread, which never waits for the main one.
+    private func pointerIdentity(at point: CGPoint) -> (known: Bool, identity: String?) {
         let now = ProcessInfo.processInfo.systemUptime
         // The pointer thread must return even while the main thread is busy.
-        // Keep serving the last answer until the one queued refresh completes.
+        // An answer that aged out still names the window it came from, so the
+        // pointer resting in that window keeps it; anywhere else the answer
+        // belongs to another window and is no answer at all.
         let isMainThread = Thread.isMainThread
         var needsRefresh = false
-        let answer = lock.withLock { () -> (settled: Bool, identity: String?) in
-            guard !allEmpty else { return (true, nil) }
+        let answer = lock.withLock { () -> (settled: Bool, known: Bool, identity: String?) in
+            guard !allEmpty else { return (true, true, nil) }
             guard MouseAppExceptionSupport.cacheHolds(region: cachedRegion,
                                                       resolvedPoint: cachedPoint,
                                                       resolvedAt: cachedAt,
@@ -248,11 +257,13 @@ final class MouseAppExceptions: ObservableObject {
                 if !isMainThread {
                     needsRefresh = !pointerRefreshScheduled
                     if needsRefresh { pointerRefreshScheduled = true }
-                    return (true, cachedIdentity)
+                    let sameWindow = MouseAppExceptionSupport.cacheNamesWindow(region: cachedRegion,
+                                                                              point: point)
+                    return (true, sameWindow, sameWindow ? cachedIdentity : nil)
                 }
-                return (false, nil)
+                return (false, true, nil)
             }
-            return (true, cachedIdentity)
+            return (true, true, cachedIdentity)
         }
         if needsRefresh {
             DispatchQueue.main.async { [weak self] in
@@ -261,7 +272,7 @@ final class MouseAppExceptions: ObservableObject {
                 _ = self.pointerIdentity(at: point)
             }
         }
-        if answer.settled { return answer.identity }
+        if answer.settled { return (answer.known, answer.identity) }
 
         let window = MouseAppExceptionSupport.pointerWindow(in: WindowServerSupport.onScreenWindows(),
                                                             at: point,
@@ -275,7 +286,7 @@ final class MouseAppExceptions: ObservableObject {
             cachedPoint = point
             cachedAt = now
         }
-        return identity
+        return (true, identity)
     }
 
     /// A program with no bundle identifier answers to the file being run

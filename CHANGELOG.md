@@ -31,7 +31,7 @@ Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimal
 - The privacy guide explains developer update requests, which apps they can reveal, and how to turn them off.
 - Focus follows mouse, window previews, clipboard history and recent captures avoid unnecessary polling, image processing, icon retention and history writes.
 - Command Bar remembers search choices across launches, tolerates short typos, and offers more emoji through its category or a colon. Thanks to @MaximilianMauroner.
-- Scratchpad notes move to private storage, stay out of settings exports, and preserve originals when reading fails; thanks to @CSkjolden.
+- Scratchpad notes move to private storage, stay out of settings exports, and keep the original when it cannot be read. Thanks to @CSkjolden.
 - Build checks read the keycap your keyboard layout shows, where they expected the US one. Thanks to @mugurc.
 - Build checks stop expecting one macOS wording for feet and inches. Thanks to @iva-zhu.
 - Build checks adapt to Macs with larger thread pools. Thanks to @mugurc.
