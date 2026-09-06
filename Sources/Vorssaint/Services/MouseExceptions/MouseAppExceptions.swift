@@ -22,7 +22,8 @@ import CoreGraphics
 ///
 /// The lists are written on the main thread; the taps that ask run on the
 /// pointer thread (`PointerTapRunLoop`), so everything they read is guarded by
-/// `lock` and the AppKit half of resolving is asked on the main thread.
+/// `lock`. Pointer callbacks reuse the last answer and schedule a refresh on
+/// the main thread without waiting for it.
 final class MouseAppExceptions: ObservableObject {
     static let shared = MouseAppExceptions()
 
@@ -52,6 +53,7 @@ final class MouseAppExceptions: ObservableObject {
     private var cachedRegion: CGRect?
     private var cachedPoint: CGPoint = .zero
     private var cachedAt: TimeInterval = -1
+    private var pointerRefreshScheduled = false
 
     private static let ownProcessID = Int32(getpid())
 
@@ -232,27 +234,41 @@ final class MouseAppExceptions: ObservableObject {
     /// back to the app in front when the pointer is over none.
     private func pointerIdentity(at point: CGPoint) -> String? {
         let now = ProcessInfo.processInfo.systemUptime
-        // The cache answers under the lock; resolving happens outside it,
-        // since it ends up on the main thread.
+        // The pointer thread must return even while the main thread is busy.
+        // Keep serving the last answer until the one queued refresh completes.
+        let isMainThread = Thread.isMainThread
+        var needsRefresh = false
         let answer = lock.withLock { () -> (settled: Bool, identity: String?) in
             guard !allEmpty else { return (true, nil) }
             guard MouseAppExceptionSupport.cacheHolds(region: cachedRegion,
                                                       resolvedPoint: cachedPoint,
                                                       resolvedAt: cachedAt,
                                                       point: point,
-                                                      now: now) else { return (false, nil) }
+                                                      now: now) else {
+                if !isMainThread {
+                    needsRefresh = !pointerRefreshScheduled
+                    if needsRefresh { pointerRefreshScheduled = true }
+                    return (true, cachedIdentity)
+                }
+                return (false, nil)
+            }
             return (true, cachedIdentity)
+        }
+        if needsRefresh {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                defer { self.lock.withLock { self.pointerRefreshScheduled = false } }
+                _ = self.pointerIdentity(at: point)
+            }
         }
         if answer.settled { return answer.identity }
 
         let window = MouseAppExceptionSupport.pointerWindow(in: WindowServerSupport.onScreenWindows(),
                                                             at: point,
                                                             ownProcessID: Self.ownProcessID)
-        let identity = Self.onMain { () -> String? in
-            let app = window.map { NSRunningApplication(processIdentifier: $0.processID) }
-                ?? NSWorkspace.shared.frontmostApplication
-            return Self.identity(for: app)
-        }
+        let app = window.map { NSRunningApplication(processIdentifier: $0.processID) }
+            ?? NSWorkspace.shared.frontmostApplication
+        let identity = Self.identity(for: app)
         lock.withLock {
             cachedIdentity = identity
             cachedRegion = window?.frame

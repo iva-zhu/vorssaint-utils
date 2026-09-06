@@ -20250,6 +20250,60 @@ struct MetricsTests {
                                                         point: CGPoint(x: 101, y: 100), now: 10.2),
                "an answer of nothing only covers the exact spot it was resolved at")
 
+        // Hold the main queue while a real pointer lookup runs elsewhere. A
+        // synchronous hop would miss the deadline even with a cold cache.
+        // Volatile preferences keep this fixture out of the user's settings.
+        do {
+            let defaults = UserDefaults.standard
+            let savedArguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+            var arguments = savedArguments
+            for scope in MouseExceptionScope.allCases {
+                arguments[scope.defaultsKey] = ["com.example.mouse-exception-test"]
+            }
+            defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+            let exceptions = MouseAppExceptions.shared
+            exceptions.reload()
+            defer {
+                defaults.setVolatileDomain(savedArguments, forName: UserDefaults.argumentDomain)
+            }
+
+            func queryWithoutMain(_ label: String) {
+                let finished = DispatchGroup()
+                finished.enter()
+                Thread {
+                    for index in 0..<100 {
+                        let point = CGPoint(x: -10_000 - index, y: -10_000)
+                        for scope in [MouseExceptionScope.middleClick, .scrollDirection] {
+                            _ = exceptions.excludesPointerTarget(scope, at: point)
+                        }
+                    }
+                    finished.leave()
+                }.start()
+                expect(finished.wait(timeout: .now() + 0.5) == .success,
+                       "\(label) pointer lookups return while the main queue is held")
+                // Drain both the refresh and a failed synchronous lookup so
+                // a regression fails an assertion rather than wedging tests.
+                var drained = false
+                DispatchQueue.main.async { drained = true }
+                let deadline = Date().addingTimeInterval(5)
+                while (!drained || finished.wait(timeout: .now()) != .success),
+                      Date() < deadline {
+                    RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+                }
+                expect(drained && finished.wait(timeout: .now()) == .success,
+                       "pointer lookups and the queued refresh finish once main is available")
+            }
+
+            queryWithoutMain("cold-cache")
+            queryWithoutMain("changed-window")
+            Thread.sleep(forTimeInterval: MouseAppExceptionSupport.resolveLifetime)
+            queryWithoutMain("expired-cache")
+            for scope in MouseExceptionScope.allCases { arguments[scope.defaultsKey] = [String]() }
+            defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+            exceptions.reload()
+            queryWithoutMain("empty-list")
+        }
+
         for language in AppLanguage.allCases {
             let strings = FeatureStrings.mouseExceptions(language)
             let values = Mirror(reflecting: strings).children.compactMap { $0.value as? String }

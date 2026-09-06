@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimalist window previews and Dock middle-click closing, and brings battery details together in Power. It expands capture, window and keyboard controls and improves recording and note safety, resource use, app updates, network readings, readability, localization, mouse reconnection, focus, search, shortcut recovery, file moves and privacy.
+Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimalist window previews and Dock middle-click closing, and brings battery details together in Power. It expands capture, window and keyboard controls and improves recording and note safety, resource use, app updates, network readings, readability, localization, mouse responsiveness and reconnection, focus, search, shortcut recovery, file moves and privacy disclosures.
 
 ### Added
 - Optional minimal previews hide window titles, controls and decoration in the Dock and App Switcher while keeping selection visible.
@@ -28,6 +28,7 @@ Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimal
 ### Changed
 - Battery charge, history, temperature, accessory levels and energy-consuming apps move from System to Power, alongside charging, health and remaining time.
 - App updates recognize installer-based and renamed apps, refresh manual searches, and use store identifiers to improve detection.
+- The privacy guide explains developer update requests, which apps they can reveal, and how to turn them off.
 - Focus follows mouse, window previews, clipboard history and recent captures avoid unnecessary polling, image processing, icon retention and history writes.
 - Command Bar remembers search choices across launches, tolerates short typos, and offers more emoji through its category or a colon. Thanks to @MaximilianMauroner.
 - Scratchpad notes move to private storage, stay out of settings exports, and preserve originals when reading fails; thanks to @CSkjolden.
@@ -74,7 +75,7 @@ Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimal
 - The recording editor's look presets carry one name each instead of repeating it, and sizes use a proper multiplication sign.
 - The zoom panel's button says what it does instead of borrowing the timeline's hint to click somewhere else.
 - Slider labels shrink instead of being cut where Turkish and Spanish run past the column, in the backdrop and recording panels.
-- Clicks and scrolling no longer lag in full-screen apps and games while the three-finger middle click or the reversed scroll direction is on.
+- Clicks and scrolling stay responsive with three-finger middle click or reversed scrolling enabled, including when apps are excluded.
 - Tapping Super key for Escape no longer carries a modifier still reported by the keyboard. Thanks to @gatzifratzi, @PathGao and @hash00.
 
 ## [3.3.3-beta.4] - 2026-09-03
