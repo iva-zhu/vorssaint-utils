@@ -58,6 +58,9 @@ enum TemperatureSensorSelector {
 
     static func platform(brandString: String?) -> CPUTemperaturePlatform {
         let brand = brandString?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // Preserve the established Tp/Te reading path for this supported chip
+        // until a verified per-core map is available.
+        if brand == "Apple A18 Pro" { return .generic }
         switch appleSiliconGeneration(in: brand) {
         case 1: return .appleM1Family
         case 2: return .appleM2Family

@@ -1787,8 +1787,48 @@ struct MetricsTests {
         expect(TemperatureSensorSelector.platform(brandString: "Apple M5") == .appleM5Family,
                "Apple M5 uses the mapped CPU core sensor set")
         expect(TemperatureSensorSelector.platform(brandString: "Apple M10") == .unmappedAppleSilicon
-               && TemperatureSensorSelector.platform(brandString: "Apple A18 Pro") == .unmappedAppleSilicon,
+               && TemperatureSensorSelector.platform(brandString: "Apple A19 Pro") == .unmappedAppleSilicon,
                "unmapped Apple Silicon never falls through to arbitrary CPU sensors")
+        let a18Platform = TemperatureSensorSelector.platform(brandString: "Apple A18 Pro")
+        expect(a18Platform == .generic,
+               "A18 Pro preserves the CPU temperature path available before 3.3.3")
+        expect(TemperatureSensorSelector.platform(brandString: "  Apple A18 Pro\n") == a18Platform,
+               "A18 Pro identification ignores surrounding whitespace")
+        expect(TemperatureSensorSelector.platform(brandString: "Apple A18 Pro Max") == .unmappedAppleSilicon,
+               "A18 Pro compatibility does not guess support for another chip")
+        expect(!TemperatureSensorSelector.hasCPUCoreSet(platform: a18Platform),
+               "A18 Pro discovery keeps its fallback readings without inventing a per-core map")
+        // A small hardware diagnostic sample, followed by synthetic failure cases.
+        let a18Sensors: [(key: String, value: Double)] = [
+            ("Te05", 66.3), ("Tp05", 66.6), ("Tp0t", 75.0),
+            ("Tg0D", 63.1), ("TB0T", 25.1),
+        ]
+        let a18CPUReadings = a18Sensors.filter {
+            TemperatureSensorSelector.isCPUTemperatureKey($0.key, platform: a18Platform)
+        }
+        expect(a18CPUReadings.map(\.key) == ["Te05", "Tp05", "Tp0t"],
+               "A18 Pro discovery retains both CPU families and excludes GPU and battery")
+        expectClose(TemperatureSensorSelector.displayedCPUTemperature(
+            readings: a18CPUReadings, platform: a18Platform
+        ) ?? -1, 75.0, "A18 Pro restores the previous hottest CPU-family reading")
+        for key in ["Te05", "Tp05", "Tp0t"] {
+            expectClose(TemperatureSensorSelector.displayedCPUTemperature(
+                readings: [(key, 66.3)], platform: a18Platform
+            ) ?? -1, 66.3, "A18 Pro keeps a readable CPU sensor when other sensors are absent: \(key)")
+        }
+        let a18InvalidReadings: [(key: String, value: Double)] = [
+            ("Tp00", 0), ("Tp01", 7), ("Te05", 125),
+            ("Te0S", .nan), ("Tp05", .infinity),
+        ]
+        expect(TemperatureSensorSelector.displayedCPUTemperature(
+            readings: a18InvalidReadings, platform: a18Platform
+        ) == nil, "A18 Pro rejects broken readings instead of fabricating a temperature")
+        expectClose(TemperatureSensorSelector.displayedCPUTemperature(
+            readings: a18InvalidReadings + [("Tp0t", 75)], platform: a18Platform
+        ) ?? -1, 75, "broken A18 Pro sensors do not suppress another valid reading")
+        expect(TemperatureSensorSelector.displayedCPUTemperature(
+            readings: [], platform: a18Platform
+        ) == nil, "A18 Pro remains unavailable when no CPU sensor answers")
         expect(TemperatureSensorSelector.platform(brandString: "Generic CPU") == .generic,
                "other processors keep the generic CPU sensor path")
         expect(TemperatureSensorSelector.isCPUTemperatureKey("Tf4E", platform: .appleM3Family)

@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Summary
+Restores CPU temperature readings on A18 Pro.
+
+### Fixed
+- CPU temperature: restored readings on A18 Pro that disappeared after updating to 3.3.3.
+
 ## [3.3.3] - 2026-09-06
 
 ### Summary

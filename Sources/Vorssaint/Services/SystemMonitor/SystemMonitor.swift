@@ -944,11 +944,9 @@ final class SystemMonitor: ObservableObject {
 
     private func cpuTemperature() -> Double? {
         guard smc != nil else { return nil }
-        // The core set decides the displayed value whenever it answers, so a
-        // normal tick reads only those keys; the remaining Tp/Te keys are
-        // swept exactly when they would have mattered before the split —
-        // unknown platforms (empty core set) or a tick with no plausible
-        // core reading.
+        // Mapped chips read only their verified core keys. The generic
+        // compatibility path reads the remaining Tp/Te keys when there is
+        // no mapped core set.
         var readings = temperatureReadings(of: preferredCPUKeys)
         if let value = TemperatureSensorSelector.displayedCPUTemperature(readings: readings,
                                                                          platform: cpuTemperaturePlatform) {
