@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimalist window previews and Dock middle-click closing, and brings battery details together in Power. It expands capture, window and keyboard controls and improves recording safety, resource use, app updates, network readings, readability, localization, mouse reconnection, focus, search, shortcut recovery, file moves and privacy.
+Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimalist window previews and Dock middle-click closing, and brings battery details together in Power. It expands capture, window and keyboard controls and improves recording and note safety, resource use, app updates, network readings, readability, localization, mouse reconnection, focus, search, shortcut recovery, file moves and privacy.
 
 ### Added
 - Optional minimal previews hide window titles, controls and decoration in the Dock and App Switcher while keeping selection visible.
@@ -30,7 +30,7 @@ Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimal
 - App updates recognize installer-based and renamed apps, refresh manual searches, and use store identifiers to improve detection.
 - Focus follows mouse, window previews, clipboard history and recent captures avoid unnecessary polling, image processing, icon retention and history writes.
 - Command Bar remembers search choices across launches, tolerates short typos, and offers more emoji through its category or a colon. Thanks to @MaximilianMauroner.
-- Scratchpad notes stay in the app's private storage instead of the preferences, so a settings export no longer carries what you typed. Thanks to @CSkjolden.
+- Scratchpad notes move to private storage, stay out of settings exports, and preserve originals when reading fails; thanks to @CSkjolden.
 - Build checks read the keycap your keyboard layout shows, where they expected the US one. Thanks to @mugurc.
 - Build checks stop expecting one macOS wording for feet and inches. Thanks to @iva-zhu.
 - Build checks adapt to Macs with larger thread pools. Thanks to @mugurc.
