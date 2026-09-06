@@ -8744,6 +8744,64 @@ struct MetricsTests {
         expect(CutPasteProgressSupport.displayPosition(completed: 5, total: 5) == 5,
                "the counter never runs past the batch size")
 
+        expect(CutPastePrivilegeSupport.needsPrivileges(
+            NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError)),
+               "a destination the account cannot write is worth handing to Finder")
+        expect(CutPastePrivilegeSupport.needsPrivileges(
+            NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))),
+               "a POSIX permission refusal reaches the same retry")
+        expect(CutPastePrivilegeSupport.needsPrivileges(
+            NSError(domain: NSCocoaErrorDomain, code: NSFileWriteFileExistsError,
+                    userInfo: [NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain,
+                                                             code: Int(EPERM))])),
+               "the refusal is found in the underlying error too")
+        expect(!CutPastePrivilegeSupport.needsPrivileges(
+            NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError)),
+               "a full disk fails the same way for Finder, so it never asks")
+        expect(!CutPastePrivilegeSupport.needsPrivileges(
+            NSError(domain: NSCocoaErrorDomain, code: NSFileWriteVolumeReadOnlyError)),
+               "a read-only volume never raises a dialog it cannot use")
+        expect(!CutPastePrivilegeSupport.needsPrivileges(
+            NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotWriteToFile)),
+               "an unrelated error domain stays a plain failure")
+        do {
+            let fm = FileManager.default
+            let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            let destination = root.appendingPathComponent("destination")
+            try fm.createDirectory(at: destination, withIntermediateDirectories: true)
+            defer { try? fm.removeItem(at: root) }
+            let first = root.appendingPathComponent("first")
+            let second = root.appendingPathComponent("second")
+            try Data([1]).write(to: first)
+            try Data([2]).write(to: second)
+            let canceled = CutPastePrivilegeSupport.reconcile(
+                [first, second], into: destination, canceled: true, fm: fm)
+            expect(canceled.moved == 0 && canceled.failed == 0
+                && canceled.stillCut == [first, second],
+                   "canceling before a move keeps the whole selection")
+            try fm.moveItem(at: first, to: destination.appendingPathComponent("first"))
+            let partial = CutPastePrivilegeSupport.reconcile(
+                [first, second], into: destination, canceled: true, fm: fm)
+            expect(partial.moved == 1 && partial.failed == 0 && partial.stillCut == [second],
+                   "canceling after a partial move retains only the unmoved file")
+            let failure = CutPastePrivilegeSupport.reconcile(
+                [first, second], into: destination, canceled: false, fm: fm)
+            expect(failure.moved == 1 && failure.failed == 1 && failure.stillCut.isEmpty,
+                   "a partial failure reports the files that actually landed")
+            try fm.removeItem(at: second)
+            let vanished = CutPastePrivilegeSupport.reconcile(
+                [second], into: destination, canceled: false, fm: fm)
+            expect(vanished.moved == 0 && vanished.failed == 1,
+                   "a missing source without a destination is not a successful move")
+            try Data([2]).write(to: destination.appendingPathComponent("second"))
+            let success = CutPastePrivilegeSupport.reconcile(
+                [first, second], into: destination, canceled: false, fm: fm)
+            expect(success.moved == 2 && success.failed == 0 && success.stillCut.isEmpty,
+                   "a completed batch clears every cut mark")
+        } catch {
+            expect(false, "protected-folder move fixtures: \(error)")
+        }
+
         // MARK: Paste copied image as file (issue #429)
 
         expect(FinderPasteImageSupport.preferredImageType(in: ["public.utf8-plain-text"]) == nil,
