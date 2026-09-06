@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimalist window previews and Dock middle-click closing, and brings battery details together in Power. It expands capture, window and keyboard controls and improves recording safety, resource use, app updates, network readings, readability, localization, mouse reconnection, focus, search, shortcut recovery and privacy.
+Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimalist window previews and Dock middle-click closing, and brings battery details together in Power. It expands capture, window and keyboard controls and improves recording safety, resource use, app updates, network readings, readability, localization, mouse reconnection, focus, search, shortcut recovery, file moves and privacy.
 
 ### Added
 - Optional minimal previews hide window titles, controls and decoration in the Dock and App Switcher while keeping selection visible.
@@ -40,6 +40,7 @@ Vorssaint adds app shortcuts, recording overlays, Keep Awake automation, minimal
 - Package installation and update logs use less processing.
 
 ### Fixed
+- Cut files can move into protected folders with system authentication, and canceling keeps unfinished items ready to paste again. Thanks to @aesophor.
 - App updates detect universal store apps using their Mac versions and warn when store checks cannot be completed.
 - Opening a recording with damaged pointer data no longer requests excessive memory.
 - Saving a recording keeps the file already there when an export fails or is cancelled, and never writes a video missing your edits.
