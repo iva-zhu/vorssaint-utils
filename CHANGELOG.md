@@ -4,22 +4,10 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [3.3.3] - 2026-09-06
 
 ### Summary
-Captures stay protected when history cannot be read or saved, and native switcher shortcuts can be recorded consistently. Partial update checks show their results and affected apps.
-
-### Fixed
-- Recent captures preserves stored images when its history cannot be read or saved.
-- App Switcher accepts its native shortcuts when recording them manually, including with system shortcut takeover disabled.
-
-### Changed
-- App Updates shows results from partial checks and names apps whose checks could not be completed.
-
-## [3.3.3]
-
-### Summary
-This update brings more control over your windows, recordings and everyday shortcuts, with less background work and fixes for freezes and lost edits. These are the highlights since 3.3.2, including the improvements tested throughout the beta cycle.
+Window controls, recording tools and everyday shortcuts gain more options, with less background work and stronger protection for saved content. This stable release brings together the improvements since 3.3.2, including the full beta cycle and the final reliability fixes.
 
 ### Performance
 - Dock previews: 50% shorter default opening wait, from 400 to 200 ms; 60% shorter app-switching wait, from 250 to 100 ms.
@@ -36,7 +24,7 @@ The Dock figures describe configured waits, not total loading time. Battery-life
 - Find more app updates, manage app shortcuts in one place, and create separate radial menus for different tasks.
 
 ### Safety and reliability
-- More reliable recording saves, private storage for personal content, and safer cleanup with clearer reports of files left behind.
+- Safer saves preserve recordings, captures and notes when operations fail; personal content uses private storage, and cleanup reports files left behind.
 - Fixes for unresponsive typing, scrolling, window switching and display controls, plus clearer text and selection in light and dark appearances.
 
 ### Details
@@ -71,7 +59,7 @@ The selected changes below cover new options and fixes that affect everyday use.
 ### Changed
 - Fan Control adds continuous manual speeds and editable temperature curves, with current and target fan speeds on supported Macs.
 - Power brings battery charge, health, history, temperature, accessories and energy-consuming apps together; System adds compressed memory and cached files.
-- App Updates checks a public catalog and supported developer feeds, recognizes more installed apps and explains incomplete checks and request privacy.
+- App Updates checks publisher feeds and a public catalog, preserves partial results and identifies apps that could not be fully checked.
 - Uninstaller and Cleaner find more verified leftovers and clearly identify files they could not remove. Thanks to @PathGao.
 - Clean URL offers editable site-specific tracking rules and shows what it removed. Thanks to @PathGao.
 - Sound Mixer groups devices, can hide inactive apps and offers finer keyboard volume steps. Thanks to @ruvelro.
@@ -96,10 +84,11 @@ The selected changes below cover new options and fixes that affect everyday use.
 - Dock actions bring restored windows forward, stay on the current desktop and respect fullscreen apps. Thanks to @pboucher, @PathGao and @iltonandrew.
 - Quit on close detects windows created late; moving windows between displays preserves their size. Thanks to @iltonandrew and @DiogoDuart3.
 - Super key preserves held modifiers, restores its source key after crashes and sends Escape correctly. Thanks to @victoraraujo01, @gatzifratzi, @PathGao and @hash00.
-- Shortcut recording and editing follow the active keyboard layout and detect system conflicts. Thanks to @PathGao, @alexis-morain, @arsarsars1, @jtprogru and @owendaw.
+- Shortcut recording respects keyboard layouts, detects conflicts and accepts native switcher combinations. Thanks to @PathGao, @alexis-morain, @arsarsars1, @jtprogru and @owendaw.
 - Clipboard and snippet searches support input-method composition; multiline snippets preserve every line and rich clipboard content. Thanks to @PathGao and @fermincasagrande.
 - Clipboard keyboard navigation stays stable, large previews remain responsive and stored history stays readable. Thanks to @andreisuslov and @naveenkrdy.
 - Shelf preserves saved items when its list cannot be fully read. Thanks to @PathGao.
+- Capture history preserves images when its list cannot be read or saved.
 - Recording saves preserve existing files if export fails or is canceled, and reject incomplete edits or damaged pointer data.
 - Recordings avoid doubled mixer audio; stopping while typing no longer risks a crash. Thanks to @PathGao.
 - Recording trim handles work from the start; other capture shortcuts leave active recordings alone. Thanks to @lmilojevicc.
