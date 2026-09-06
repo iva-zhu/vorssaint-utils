@@ -3937,16 +3937,20 @@ struct MetricsTests {
             expect(StatusItemPlacementSupport.mainAutosaveName(in: statusDefaults) == "VorssaintMenuBarItem",
                    "generation 0 uses base autosave name")
 
+            // The coordinate macOS saves for the icon is what puts it back in
+            // the same spot on the next launch. 3.3.3 deleted the one written
+            // by the older recovery on every launch, which moved the icon to
+            // where a first-time item goes and, on a full bar, out of sight.
             let legacyKey = "NSStatusItem Preferred Position VorssaintMenuBarItem"
             statusDefaults.set(64.0, forKey: legacyKey)
-            StatusItemPlacementSupport.sanitizeStalePlacement(in: statusDefaults)
-            expect(statusDefaults.object(forKey: legacyKey) == nil,
-                   "sanitizeStalePlacement removes the buggy 64.0 system-colliding offset")
+            StatusItemPlacementSupport.clearRememberedVisibility(in: statusDefaults)
+            expect(statusDefaults.double(forKey: legacyKey) == 64.0,
+                   "an icon placed by the older recovery keeps its spot through an update")
 
             statusDefaults.set(320.5, forKey: legacyKey)
-            StatusItemPlacementSupport.sanitizeStalePlacement(in: statusDefaults)
+            StatusItemPlacementSupport.clearRememberedVisibility(in: statusDefaults)
             expect(statusDefaults.double(forKey: legacyKey) == 320.5,
-                   "sanitizeStalePlacement preserves legitimate user-arranged coordinates")
+                   "an icon the person arranged themselves keeps its spot too")
 
             StatusItemPlacementSupport.bumpPlacementGeneration(in: statusDefaults)
             let gen1Name = StatusItemPlacementSupport.mainAutosaveName(in: statusDefaults)
@@ -3954,6 +3958,35 @@ struct MetricsTests {
                    "bumped generation produces numbered autosave name")
             expect(statusDefaults.object(forKey: "NSStatusItem Preferred Position VorssaintMenuBarItem.1") == nil,
                    "bumpPlacementGeneration does not seed any hardcoded preferred position")
+
+            // Recovery keeps the spot the person arranged and only drops the
+            // hidden state macOS remembered: an item that starts over with no
+            // saved position is born against the notch, the first place a
+            // crowded bar hides.
+            let gen1Position = "NSStatusItem Preferred Position VorssaintMenuBarItem.1"
+            statusDefaults.set(280.0, forKey: gen1Position)
+            statusDefaults.set(false, forKey: "NSStatusItem Visible VorssaintMenuBarItem.1")
+            statusDefaults.set(false, forKey: "NSStatusItem VisibleCC VorssaintMenuBarItem.1")
+            StatusItemPlacementSupport.clearRememberedVisibility(in: statusDefaults)
+            expect(statusDefaults.double(forKey: gen1Position) == 280.0,
+                   "clearing the remembered visibility keeps the arranged position")
+            expect(StatusItemPlacementSupport.placementGeneration(in: statusDefaults) == 1
+                    && StatusItemPlacementSupport.mainAutosaveName(in: statusDefaults) == gen1Name,
+                   "recovery leaves the item's identity alone, so reopening cannot churn it")
+            expect(statusDefaults.object(forKey: "NSStatusItem Visible VorssaintMenuBarItem.1") == nil
+                    && statusDefaults.object(forKey: "NSStatusItem VisibleCC VorssaintMenuBarItem.1") == nil,
+                   "clearing the remembered visibility drops both spellings macOS has used")
+
+            // Giving the spot up is what an explicit recovery escalates to,
+            // and only after keeping it has failed.
+            expect(statusDefaults.object(forKey: gen1Position) == nil
+                    || statusDefaults.double(forKey: gen1Position) == 280.0,
+                   "only the identity reset gives up a saved position")
+            StatusItemPlacementSupport.bumpPlacementGeneration(in: statusDefaults)
+            expect(statusDefaults.object(forKey: gen1Position) == nil
+                    && StatusItemPlacementSupport.mainAutosaveName(in: statusDefaults)
+                        == "VorssaintMenuBarItem.2",
+                   "the identity reset does give the saved position up")
             statusDefaults.removePersistentDomain(forName: statusPlacementSuite)
         }
         expect(registeredDefaults[DefaultsKey.panelControlAutoQuit] as? Bool == true,

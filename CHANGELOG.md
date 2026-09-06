@@ -7,11 +7,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-Restores CPU temperature readings that disappeared on Apple Silicon Macs after updating to 3.3.3.
+Brings back the CPU temperature and the menu bar icon that disappeared after updating to 3.3.3.
 
 ### Fixed
 - CPU temperature: restored readings on A18 Pro that disappeared after updating to 3.3.3.
 - CPU temperature: restored readings on Macs whose chip does not carry the sensors its generation normally has, including affected M1 Macs.
+- Menu bar: the icon no longer disappears after updating to 3.3.3, keeps the spot you arranged, and only starts over when bringing it back needs it.
 
 ## [3.3.3] - 2026-09-06
 
