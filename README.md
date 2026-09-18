@@ -46,6 +46,27 @@
   <a href="https://trendshift.io/repositories/53716?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-53716" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/53716/weekly?language=Swift" alt="vorssaint/vorssaint-utils | Trendshift weekly ranking" width="250" height="55"></a>
 </p>
 
+## This fork's development build
+
+The [`mix/cycle-widths-ascii`](https://github.com/iva-zhu/vorssaint-utils/tree/mix/cycle-widths-ascii)
+branch is a personal development build based on upstream `main`. It contains two
+features that are still waiting to land upstream:
+
+- **Window Layout cycling** from [PR #1632](https://github.com/vorssaintapp/vorssaint-utils/pull/1632): repeat the same Left or Right shortcut to cycle `half → two thirds → one third → half` on the current display. It is opt-in and keeps the existing top/bottom and display-crossing behavior when disabled.
+- **Automatic ABC layout for Command Bar** from [PR #1342](https://github.com/vorssaintapp/vorssaint-utils/pull/1342): temporarily switches from a non-Latin keyboard layout to an ASCII-capable layout while Command Bar is open, then restores the previous layout.
+
+This is not an official release. It is built for testing and daily use before
+both pull requests are merged. Do not update it from inside Vorssaint or via
+Homebrew, because an official update will replace these features. To reproduce
+the build locally:
+
+```sh
+git clone https://github.com/iva-zhu/vorssaint-utils.git
+cd vorssaint-utils
+git checkout mix/cycle-widths-ascii
+./build.sh --install
+```
+
 <p align="center">
   <img src="docs/assets/readme/panel-mixer.png" width="196" alt="Volume mixer with per app sliders, one app boosted past 100 percent">
   <img src="docs/assets/readme/panel-system.png" width="196" alt="System tab with temperatures, usage graphs and memory pressure">
