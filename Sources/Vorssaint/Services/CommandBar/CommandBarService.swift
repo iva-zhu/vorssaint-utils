@@ -100,9 +100,17 @@ final class CommandBarService: ObservableObject {
     /// above the list are about to act on.
     @Published private(set) var selectionPreview = ""
     @Published private(set) var selectedIndex = 0
+    /// How many columns the emoji grid is showing. The view measures the real
+    /// layout and reports it here; the arrow keys read it to walk a row instead
+    /// of a list. Zero outside the grid, where arrows mean what they always did.
+    @Published var emojiGridColumns = 0
     @Published private(set) var mode: Mode = .search
     @Published private(set) var presentationID = UUID()
     @Published private(set) var shortcutRegistrationFailed = false
+    /// Whether the emoji key's own registration was refused, because another
+    /// app got to the combination first. Shown in Settings so the key is not
+    /// a mystery.
+    @Published private(set) var emojiShortcutRegistrationFailed = false
     /// Rows whose own combination the system refused, because another app got
     /// there first. Shown in Settings so the key is not a mystery.
     @Published private(set) var refusedRowShortcutKeys: Set<String> = []
@@ -130,6 +138,10 @@ final class CommandBarService: ObservableObject {
     @Published private(set) var isCompactHome = false
 
     private let hotkey = QuickToolHotkey(id: 20)
+    /// The emoji grid's own key. Unlike the bar's field key this one never
+    /// opens the field: it lands on the tiles, and takes the combination over
+    /// from the system emoji picker when the person accepts the offer.
+    private let emojiHotkey = QuickToolHotkey(id: 25)
     private var rowHotkeys: [QuickToolHotkey] = []
     private var panel: NSPanel?
     private var keyMonitor: Any?
@@ -230,6 +242,7 @@ final class CommandBarService: ObservableObject {
     private init() {
         CommandBarLearning.discardLegacyQueryHabits()
         hotkey.onPress = { [weak self] in self?.toggle() }
+        emojiHotkey.onPress = { [weak self] in self?.toggleEmoji() }
         scriptRunner.onResult = { [weak self] in self?.refreshResults() }
         fileSearch.onResult = { [weak self] in self?.refreshResults() }
     }
@@ -244,6 +257,7 @@ final class CommandBarService: ObservableObject {
                                             fallback: .commandBarDefault)
         shortcutRegistrationFailed = !hotkey.sync(enabled: enabled, shortcut: shortcut,
                                                   storageKey: DefaultsKey.commandBarShortcut)
+        syncEmojiShortcut()
         reloadPreferenceCaches()
         syncRowHotkeys()
         if available {
@@ -288,6 +302,7 @@ final class CommandBarService: ObservableObject {
     func suspend() {
         pendingAppShortcut.cancel()
         hotkey.unregister()
+        emojiHotkey.unregister()
         for hotkey in rowHotkeys { hotkey.unregister() }
         rowHotkeys = []
         hide()
@@ -300,6 +315,50 @@ final class CommandBarService: ObservableObject {
 
     func toggle() {
         isVisible ? hide() : show()
+    }
+
+    /// The emoji key's own entry: never the bare field, always the grid. The
+    /// same flip as `toggle`, with the category pre-armed before the results
+    /// read it.
+    func toggleEmoji() {
+        guard AppFeature.commandBar.isAvailable else { return }
+        if isVisible, activeCategory == .emoji {
+            hide()
+            return
+        }
+        show()
+        activeCategory = .emoji
+        selectedID = nil
+        lastRankedQuery = nil
+        refreshResults()
+    }
+
+    /// The emoji grid key's registration, mirroring the field key's: an
+    /// enabled shortcut claims itself, and a disable hands it back. A refusal
+    /// from macOS is not swallowed: Settings names it beside the toggle. A
+    /// macOS key whose take-over was never agreed is put back down here too —
+    /// a restored backup or an older build's leftovers must not register
+    /// beside the system picker; the toggle asks for the take-over again. The
+    /// question is the same one Settings asks: keys this app holds count as
+    /// macOS's, so the two paths can never disagree about arming.
+    func syncEmojiShortcut() {
+        let available = AppFeature.commandBar.isAvailable
+        let shortcut = GlobalShortcut.saved(for: DefaultsKey.commandBarEmojiShortcut,
+                                            fallback: .commandBarEmojiDefault)
+        var enabled = available
+            && UserDefaults.standard.bool(forKey: DefaultsKey.commandBarEmojiShortcutEnabled)
+        if enabled, !SystemShortcutTakeoverSupport.emojiShortcutMayArm(
+            conflictsWithMacOS: SystemShortcutTakeover.conflictsWithMacOS(
+                shortcut, for: .commandBarEmoji),
+            takenOver: SystemShortcutTakeover.isTakenOver(DefaultsKey.commandBarEmojiShortcut)) {
+            enabled = false
+            UserDefaults.standard.set(false, forKey: DefaultsKey.commandBarEmojiShortcutEnabled)
+        }
+        // Synced on both turns of the toggle: the unregister on the way off is
+        // what hands ⌃⌘Space back to the system picker.
+        let registered = emojiHotkey.sync(enabled: enabled, shortcut: shortcut,
+                                          storageKey: DefaultsKey.commandBarEmojiShortcut)
+        emojiShortcutRegistrationFailed = enabled && !registered
     }
 
     func show() {
@@ -592,6 +651,13 @@ final class CommandBarService: ObservableObject {
     func setRowShortcut(_ shortcut: GlobalShortcut?, for entry: CommandBarEntry) -> String? {
         guard AppFeature.commandBar.isAvailable else { return nil }
         if let shortcut, let message = rowShortcutIssue(shortcut, for: entry) { return message }
+        // A combination macOS answers is not a refusal here: naming it to this
+        // row IS the agreement to take it over. The claim is named by the row,
+        // so a later change of the binding hands the key back on its own.
+        if let shortcut, shortcut.conflictsWithSystemShortcut {
+            SystemShortcutTakeover.setTakeOver(
+                "\(DefaultsKey.commandBarRowShortcuts).\(entry.stableKey)", true)
+        }
         let next = CommandBarRowShortcuts.setting(shortcut, for: entry.stableKey, in: rowShortcuts)
         UserDefaults.standard.set(CommandBarRowShortcuts.encode(next),
                                   forKey: DefaultsKey.commandBarRowShortcuts)
@@ -614,9 +680,9 @@ final class CommandBarService: ObservableObject {
         if let role = GlobalShortcutRole.conflict(for: shortcut, excluding: nil) {
             return String(format: strings.shortcutConflictFormat, role.title(strings))
         }
-        if shortcut.conflictsWithSystemShortcut {
-            return String(format: strings.shortcutConflictFormat, "macOS")
-        }
+        // The macOS conflict is settled by the take-over in `setRowShortcut`
+        // instead of an error: the person who records the combination means
+        // to have it, and the row's claim restores it when it goes.
         if AppFeature.windowLayout.isAvailable,
            let title = WindowLayoutService.shared.shortcutConflictTitle(shortcut) {
             return String(format: strings.shortcutConflictFormat, title)
@@ -755,6 +821,15 @@ final class CommandBarService: ObservableObject {
     func goHome() {
         if !query.isEmpty { query = "" }
         if activeCategory != nil { setCategory(nil) }
+    }
+
+    /// The emoji grid's own door, from the row the search offers: the query
+    /// that found the door is left at the threshold, so the grid opens as the
+    /// full browse instead of a search-results list.
+    func openEmojiGrid() {
+        show()
+        query = ""
+        setCategory(.emoji)
     }
 
     func setCategory(_ source: CommandBarSource?) {
@@ -1707,6 +1782,17 @@ final class CommandBarService: ObservableObject {
         select(next < 0 ? next + rows.count : next)
     }
 
+    /// Walking the emoji grid: Left and Right step over one tile, Up and Down
+    /// jump a whole row — unless the target row stops early, where the walk
+    /// keeps to its edge instead of sliding sideways. Unlike the list, the
+    /// walk clamps at the ends instead of wrapping, the way the keyboard
+    /// reaches through Finder's own icon view.
+    func moveSelectionInGrid(_ dx: Int, _ dy: Int, columns: Int) {
+        select(CommandBarEmojiTileSize.gridTarget(from: selectedIndex,
+                                                  dx: dx, dy: dy,
+                                                  columns: columns, count: rows.count))
+    }
+
     /// Tab reuses a calculator answer or completes the selected search result.
     func completeSelection() {
         guard case .search = mode, let entry = selectedEntry else { return }
@@ -1746,6 +1832,28 @@ final class CommandBarService: ObservableObject {
 
     var selectedEntry: CommandBarEntry? {
         rows.indices.contains(selectedIndex) ? rows[selectedIndex] : nil
+    }
+
+    /// Whether the emoji grid is what the list area shows: the emoji category,
+    /// browsed empty or filtered by what is typed. The view reports the column
+    /// count on top of this; the arrow keys only walk the grid once it has.
+    var isEmojiGridOpen: Bool {
+        activeCategory == .emoji
+    }
+
+    /// A typed query whose whole result set the emoji catalog produced: the
+    /// grid serves it the same way, so a search of emoji looks like the
+    /// browsing of them.
+    var isEmojiResultSet: Bool {
+        activeCategory == nil
+            && !rows.isEmpty
+            && rows.allSatisfy { CommandBarSource.emoji.idPrefix.map($0.id.hasPrefix) ?? false }
+    }
+
+    /// Whether the arrow keys walk the tiles: the grid is showing and the
+    /// view has reported its geometry.
+    var isEmojiGridNavigable: Bool {
+        (isEmojiGridOpen || isEmojiResultSet) && emojiGridColumns > 1
     }
 
     /// A row by its id, from the catalog first and from what is on screen
@@ -3167,19 +3275,45 @@ final class CommandBarService: ObservableObject {
                 self.runSelected()
                 return nil
             case kVK_UpArrow:
-                if case .actions = self.mode { self.moveActionSelection(-1) } else { self.moveSelection(-1) }
+                // A modified arrow keeps its field meaning — Shift selects,
+                // Option walks by paragraph, Command jumps to the ends — so
+                // only a bare key walks the rows or the grid.
+                guard navigationModifiers.isEmpty else { return event }
+                if case .actions = self.mode { self.moveActionSelection(-1) }
+                else if self.isEmojiGridNavigable {
+                    self.moveSelectionInGrid(0, -1, columns: self.emojiGridColumns)
+                }
+                else { self.moveSelection(-1) }
                 return nil
             case kVK_DownArrow:
+                guard navigationModifiers.isEmpty else { return event }
                 if case .actions = self.mode {
                     self.moveActionSelection(1)
+                } else if self.isEmojiGridNavigable {
+                    self.moveSelectionInGrid(0, 1, columns: self.emojiGridColumns)
                 } else if !self.peekHome() {
                     self.moveSelection(1)
                 }
                 return nil
             case kVK_LeftArrow:
-                // Handed back untouched when the field has text in it.
+                // The grid is two-dimensional, so the bare Left and Right walk
+                // its tiles wherever it stands: the browsed category and the
+                // search that found only emoji alike. Fine-tuning a found tile
+                // is what the arrows are for here; a modified key goes back to
+                // the caret, which owns the word walks and the selection.
+                guard navigationModifiers.isEmpty else { return event }
+                if self.isEmojiGridNavigable {
+                    self.moveSelectionInGrid(-1, 0, columns: self.emojiGridColumns)
+                    return nil
+                }
+                // Handed back untouched when there is no grid to walk.
                 return self.moveCategory(-1) ? nil : event
             case kVK_RightArrow:
+                guard navigationModifiers.isEmpty else { return event }
+                if self.isEmojiGridNavigable {
+                    self.moveSelectionInGrid(1, 0, columns: self.emojiGridColumns)
+                    return nil
+                }
                 return self.moveCategory(1) ? nil : event
             case kVK_Tab:
                 self.completeSelection()

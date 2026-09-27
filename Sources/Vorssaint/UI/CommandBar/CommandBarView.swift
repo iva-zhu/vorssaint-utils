@@ -33,6 +33,9 @@ struct CommandBarView: View {
 
     @ObservedObject private var service = CommandBarService.shared
     @ObservedObject private var l10n = L10n.shared
+    /// Watched, not read once: a tile size picked in Settings while the grid
+    /// stands open re-lays it at once instead of waiting for the next opening.
+    @AppStorage(DefaultsKey.commandBarEmojiTileSize) private var emojiTileSizeRaw = CommandBarEmojiTileSize.medium.rawValue
     @ObservedObject private var uninstaller = AppUninstaller.shared
     @ObservedObject private var homebrew = HomebrewManager.shared
     @Environment(\.colorScheme) private var colorScheme
@@ -443,19 +446,11 @@ struct CommandBarView: View {
                 // The bar shows more than fits when nothing is typed, and a
                 // list with no scrollbar looks like a list that ends there.
                 ScrollView(showsIndicators: service.rows.count > 14) {
-                    LazyVStack(spacing: 1) {
-                        ForEach(Array(service.rows.enumerated()), id: \.element.id) { index, entry in
-                            // Every heading lives in the list, directly above
-                            // the rows it names.
-                            if let heading = service.sectionTitles[index] {
-                                sectionHeader(heading)
-                            }
-                            row(entry, index: index)
-                                .id(entry.id)
-                        }
+                    if service.isEmojiGridOpen || service.isEmojiResultSet {
+                        emojiGrid
+                    } else {
+                        rowsList
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 8)
                 }
                 // A short list makes the panel exactly as tall as it needs to
                 // be. A long one is pinned to its ceiling instead: asking the
@@ -470,6 +465,102 @@ struct CommandBarView: View {
                 }
             }
         }
+    }
+
+    /// The emoji category as tiles instead of rows: the glyph up front, its
+    /// name under it, the way the launchers people already use lay emoji out.
+    /// The grid stands for the whole emoji category, browsed empty-handed or
+    /// narrowed by what is typed, and for a search whose whole result set the
+    /// emoji catalog produced. A mixed result set falls back to the rows,
+    /// where the matched letters can be shown.
+    private var emojiGrid: some View {
+        let tile = CommandBarEmojiTileSize.resolved(raw: emojiTileSizeRaw)
+        let columns = max(1, Int((560 - 32 + 6) / (tile.tileSize + 6)))
+        return LazyVGrid(columns: Array(repeating: GridItem(.fixed(tile.tileSize), spacing: 6),
+                                        count: columns),
+                         spacing: 8) {
+            ForEach(Array(service.rows.enumerated()), id: \.element.id) { index, entry in
+                emojiTile(entry, index: index, tile: tile)
+                    .id(entry.id)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        // Reported for the arrow keys to walk the geometry the eyes see.
+        // Cleared when the list takes the space back, so Left and Right go
+        // back to walking the chips. A tile size picked in Settings re-lays
+        // the standing grid, and the walk has to follow the fresh geometry.
+        .onAppear { service.emojiGridColumns = columns }
+        .onChange(of: columns) { _, freshColumns in
+            service.emojiGridColumns = freshColumns
+        }
+        .onDisappear { service.emojiGridColumns = 0 }
+    }
+
+    /// One tile of the emoji grid. The glyph reads from the title's head, the
+    /// caption from the name the row answers to — the title is written
+    /// "😀  grinning face", so the glyph is the first token by contract of the
+    /// catalog that builds it.
+    private func emojiTile(_ entry: CommandBarEntry, index: Int, tile: CommandBarEmojiTileSize) -> some View {
+        let parts = entry.title.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+        let glyph = parts.first.map(String.init) ?? ""
+        let name = entry.matchTitle ?? parts.dropFirst().joined(separator: " ")
+        let isSelected = index == service.selectedIndex
+        return Button {
+            service.run(entry, fromClick: true)
+        } label: {
+            VStack(spacing: 3) {
+                Text(glyph)
+                    .font(.system(size: tile.glyphSize))
+                    .frame(height: tile.glyphSize + 8)
+                // Two whole lines for every tile, whatever the name's length:
+                // "fox" and "smiling face with open mouth" get the same box,
+                // so a row of tiles stays as tall as its neighbors and the
+                // grid reads as one plate instead of a ragged rug.
+                Text(name)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .multilineTextAlignment(.center)
+                    .frame(height: 26, alignment: .top)
+            }
+            .frame(width: tile.tileSize)
+            .padding(.vertical, 6)
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(isSelected ? 0.5 : 0), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(entry.title)
+        .onHover { hovering in
+            if hovering { service.selectFromHover(index) }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(entry.title)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    private var rowsList: some View {
+        LazyVStack(spacing: 1) {
+            ForEach(Array(service.rows.enumerated()), id: \.element.id) { index, entry in
+                // Every heading lives in the list, directly above
+                // the rows it names.
+                if let heading = service.sectionTitles[index] {
+                    sectionHeader(heading)
+                }
+                row(entry, index: index)
+                    .id(entry.id)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
     }
 
     private func categoryChip(_ source: CommandBarSource?, label: String) -> some View {
