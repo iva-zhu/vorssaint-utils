@@ -338,7 +338,13 @@ struct CommandBarView: View {
     /// so plainly, because a field that silently swallows every key is the
     /// most confusing thing a panel can do.
     private func shortcutCard(entryID: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        // The take-over offer standing for this capture, if any: the hint
+        // line makes room for it instead of both carrying a gap. A question
+        // the Settings page asked is not visible on the card — and not
+        // dismissible from here either.
+        let pending = service.pendingRowTakeOver[.captureCard]
+            .flatMap { $0.entry.id == entryID ? $0 : nil }
+        return VStack(alignment: .leading, spacing: 4) {
             if let entry = service.entry(withID: entryID) {
                 HStack(spacing: 10) {
                     iconView(entry)
@@ -362,7 +368,18 @@ struct CommandBarView: View {
                 .foregroundStyle(service.aliasWarning == nil
                                  ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.orange))
                 .padding(.horizontal, 17)
-                .padding(.bottom, 12)
+                .padding(.bottom, pending == nil ? 12 : 2)
+            // A combination macOS answers is never saved from the card
+            // alone: the offer stands here until it is answered, and an
+            // acceptance writes the agreement and the binding together.
+            if let pending {
+                SystemShortcutTakeOverOffer(
+                    shortcut: pending.shortcut,
+                    onAccept: { service.confirmCapturedRowShortcutTakeOver() },
+                    onDismiss: { service.declineRowShortcutTakeOver(.captureCard) })
+                    .padding(.horizontal, 17)
+                    .padding(.bottom, 12)
+            }
         }
     }
 

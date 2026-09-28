@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Vorssaint
 
 import ApplicationServices
+import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
 
@@ -22,6 +23,15 @@ enum ShortcutRecordingTap {
     private static var tap: CFMachPort?
     private static var runLoopSource: CFRunLoopSource?
     private static var handler: ((Int64, GlobalShortcutModifiers, CGEventFlags) -> Void)?
+    /// True while the field wants the keys paused (an offer is being
+    /// answered): events pass through to the app instead of the handler,
+    /// while the tap stays alive and `ShortcutCapture` keeps the app's own
+    /// global shortcuts quiet.
+    private static var isPaused = false
+    /// Routes safe button-navigation events as matched keyDown/keyUp pairs.
+    /// It also swallows autorepeats if a button action ends the pause while
+    /// its activating key is still held.
+    private static var pausedKeyRouter = CommandBarRowShortcuts.PausedKeyRouter()
     /// The key most recently pressed while recording and possibly still down.
     private static var heldKeyCode: Int64?
     /// Set when recording ends with a key still down: its autorepeats and
@@ -44,6 +54,8 @@ enum ShortcutRecordingTap {
         drainWatchdog = nil
         drainingKeyCode = nil
         heldKeyCode = nil
+        isPaused = false
+        pausedKeyRouter.reset()
         superState.reset()
         // Registered before the Accessibility check: ShortcutCapture.begin() has
         // already switched the global shortcuts off, and the resign must give them back.
@@ -82,6 +94,8 @@ enum ShortcutRecordingTap {
     /// Safe to call twice and when begin failed. When the recorded key is
     /// still down, the tap lingers just long enough to swallow its release.
     static func end() {
+        isPaused = false
+        pausedKeyRouter.reset()
         handler = nil
         guard tap != nil else { return }
         if let heldKeyCode {
@@ -90,6 +104,33 @@ enum ShortcutRecordingTap {
         } else {
             tearDown()
         }
+    }
+
+    /// Hands the keys to the app while the recording holds still — an offer
+    /// is being answered, and its buttons must take keyboard focus and
+    /// activation. The tap itself stays alive (a rebuild would churn the
+    /// system keyboard path, issue #275) and `ShortcutCapture` keeps the
+    /// app's own global shortcuts quiet.
+    static func setPaused(_ paused: Bool) {
+        guard isPaused != paused else { return }
+        isPaused = paused
+        if paused {
+            // Any key still down belongs to the app from here on: its
+            // release reaches the app, not this tap, so holding the record
+            // would drain a key that already ended.
+            heldKeyCode = nil
+        } else {
+            // Presses already handed to the app keep their release: it passes
+            // through even with the pause gone, until the tap ends.
+            superState.reset()
+        }
+    }
+
+    /// Whether a paused recording hands this key to the app. The policy is
+    /// the row take-over's own (`CommandBarRowShortcuts.passesWhilePaused`),
+    /// so the tap and the panel's monitor can never drift apart.
+    static func passesWhilePaused(keyCode: Int64, modifiers: GlobalShortcutModifiers) -> Bool {
+        CommandBarRowShortcuts.passesWhilePaused(keyCode: keyCode, modifiers: modifiers)
     }
 
     /// The drain must outlive the key, not the clock: each swallowed
@@ -108,6 +149,7 @@ enum ShortcutRecordingTap {
         drainWatchdog = nil
         drainingKeyCode = nil
         heldKeyCode = nil
+        pausedKeyRouter.reset()
         handler = nil
         superState.reset()
         if let tap {
@@ -132,6 +174,25 @@ enum ShortcutRecordingTap {
         }
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+        // The pause sits ahead of everything below. A press the policy allows
+        // reaches the app and is remembered, so its release follows it; the
+        // press itself is never the handler's — and after the pause ends the
+        // remembered release still passes through first, so a button key
+        // never lands in the recording as a fresh combination. Anything else,
+        // above all the combination the question names, keeps being
+        // swallowed while the offer waits.
+        if isPaused || handler != nil {
+            let route = pausedKeyRouter.route(
+                type == .keyDown ? .down : .up,
+                keyCode: keyCode,
+                modifiers: GlobalShortcutModifiers(cgFlags: event.flags),
+                offerIsOpen: isPaused)
+            switch route {
+            case .pass: return Unmanaged.passUnretained(event)
+            case .swallow: return nil
+            case .record: break
+            }
+        }
         if let handler {
             // Holding the super key while recording means the modifiers it
             // stands for, and the key holding them is never the shortcut.

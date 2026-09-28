@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Vorssaint
 
+import Carbon.HIToolbox
 import Foundation
 import SwiftUI
 
@@ -313,6 +314,73 @@ enum EmojiGridContract {
                              space, liveEntries: held, symbolicHotKeys: nil,
                              held: [50], role: .commandBarEmoji),
                          "a held system key reads free to the bare table check, and macOS's to the armed one")
+        }
+
+        suite.run("emoji row take-over offer keys") {
+            // While an offer stands, the recording holds still: only the keys
+            // its buttons use reach the app, and everything else — above all
+            // the combination the question names — keeps being swallowed.
+            let bare = GlobalShortcutModifiers()
+            suite.expect(CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_Tab), modifiers: bare)
+                         && CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_Tab), modifiers: [.shift])
+                         && CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_Space), modifiers: bare)
+                         && CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_Return), modifiers: bare)
+                         && CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_ANSI_KeypadEnter), modifiers: bare)
+                         && CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_UpArrow), modifiers: bare)
+                         && CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_DownArrow), modifiers: bare)
+                         && CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_LeftArrow), modifiers: bare)
+                         && CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_RightArrow), modifiers: bare)
+                         && CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_Escape), modifiers: bare),
+                         "tabbing (⇧Tab back), activating and the standing way out reach the buttons")
+            suite.expect(!CommandBarRowShortcuts.passesWhilePaused(
+                             keyCode: Int64(kVK_Space), modifiers: [.control, .command]),
+                         "the combination the question names never reaches the system while the offer waits")
+            suite.expect(!CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_Tab), modifiers: [.command])
+                         && !CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_Tab), modifiers: [.control])
+                         && !CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_Escape), modifiers: [.command])
+                         && !CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_RightArrow), modifiers: [.shift])
+                         && !CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_Space), modifiers: [.shift]),
+                         "modifier-led versions of button keys stay swallowed: they are shortcuts, not navigation")
+            suite.expect(!CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_ANSI_A), modifiers: bare)
+                         && !CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_ANSI_5), modifiers: bare)
+                         && !CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_Delete), modifiers: bare)
+                         && !CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_F5), modifiers: bare)
+                         && !CommandBarRowShortcuts.passesWhilePaused(keyCode: Int64(kVK_Shift), modifiers: bare),
+                         "letters, digits, modifiers and stray keys stay swallowed while the offer stands")
+            suite.expect(!CommandBarRowShortcuts.passesWhilePaused(
+                             keyCode: Int64(kVK_Space) + 1, modifiers: bare),
+                          "an unknown key code is never a button key")
+
+            var router = CommandBarRowShortcuts.PausedKeyRouter()
+            suite.expect(router.route(.down, keyCode: Int64(kVK_Tab), modifiers: bare,
+                                       offerIsOpen: true) == .pass
+                         && router.route(.up, keyCode: Int64(kVK_Tab), modifiers: bare,
+                                         offerIsOpen: true) == .pass,
+                         "a button-navigation press reaches the app as a complete key pair")
+            suite.expect(router.route(.down, keyCode: Int64(kVK_Space),
+                                       modifiers: [.control, .command], offerIsOpen: true) == .swallow
+                         && router.route(.up, keyCode: Int64(kVK_Space),
+                                         modifiers: bare, offerIsOpen: true) == .swallow,
+                         "the system shortcut is swallowed as a complete key pair")
+
+            var acceptedWhileHeld = CommandBarRowShortcuts.PausedKeyRouter()
+            suite.expect(acceptedWhileHeld.route(.down, keyCode: Int64(kVK_Return), modifiers: bare,
+                                                 offerIsOpen: true) == .pass
+                         && acceptedWhileHeld.route(.down, keyCode: Int64(kVK_Return), modifiers: bare,
+                                                    offerIsOpen: false) == .swallow
+                         && acceptedWhileHeld.route(.up, keyCode: Int64(kVK_Return), modifiers: bare,
+                                                    offerIsOpen: false) == .pass
+                          && acceptedWhileHeld.route(.down, keyCode: Int64(kVK_Return), modifiers: bare,
+                                                     offerIsOpen: false) == .record,
+                          "accepting while Return is held passes its release and swallows repeats")
+
+            var offers = CommandBarRowShortcuts.TakeOverOffers<String>()
+            offers[.captureCard] = "card offer"
+            offers[.appShortcutsSettings] = "settings offer"
+            offers[.appShortcutsSettings] = nil
+            suite.expect(offers[.captureCard] == "card offer"
+                         && offers[.appShortcutsSettings] == nil,
+                         "answering one surface's offer leaves the other surface's offer alone")
         }
     }
 }

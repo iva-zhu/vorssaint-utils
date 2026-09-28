@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Vorssaint
 
+import Carbon.HIToolbox
 import Foundation
 
 /// The combinations the person tied to single rows of the bar.
@@ -14,6 +15,25 @@ enum CommandBarRowShortcuts {
     /// Bound global hotkey registrations while leaving room for a shortcut
     /// for every letter and for other commands.
     static let limit = 64
+
+    /// Surfaces that can hold an unanswered row take-over offer. Kept beside
+    /// the pure slot store so source isolation is testable without the UI
+    /// service singleton.
+    enum TakeOverSource: Hashable {
+        case captureCard
+        case appShortcutsSettings
+    }
+
+    /// One unanswered offer per surface. Clearing one question cannot discard
+    /// another surface's question.
+    struct TakeOverOffers<Value> {
+        private var values: [TakeOverSource: Value] = [:]
+
+        subscript(_ source: TakeOverSource) -> Value? {
+            get { values[source] }
+            set { values[source] = newValue }
+        }
+    }
 
     /// A cold catalog may arrive after the person changed their shortcut.
     /// Only the latest request, with its original binding still intact, runs.
@@ -91,6 +111,59 @@ enum CommandBarRowShortcuts {
     /// walking the whole catalog twice.
     static func key(for shortcut: GlobalShortcut, in shortcuts: [String: GlobalShortcut]) -> String? {
         shortcuts.first { $0.value == shortcut }?.key
+    }
+
+    /// Whether a paused recording hands this press to the app. Only the keys
+    /// the offer's buttons and its keyboard walk use pass through, bare or
+    /// with Shift alone (⇧Tab walks focus back): tabbing between the buttons,
+    /// activating one, the arrows, and Escape as the standing way out. A
+    /// modifier-led combination never does — above all the combination the
+    /// question names, whose system action must not fire while the offer
+    /// waits. Pure, so the tests can pin the list.
+    static func passesWhilePaused(keyCode: Int64, modifiers: GlobalShortcutModifiers) -> Bool {
+        let onlyShift = modifiers == [.shift]
+        guard modifiers.isEmpty || (onlyShift && keyCode == Int64(kVK_Tab)) else { return false }
+        switch Int(keyCode) {
+        case kVK_Tab, kVK_Space, kVK_Return, kVK_ANSI_KeypadEnter,
+             kVK_UpArrow, kVK_DownArrow, kVK_LeftArrow, kVK_RightArrow,
+             kVK_Escape:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Routes keys at the take-over offer boundary. Once a safe keyDown has
+    /// reached the app, its keyUp must follow even if accepting the offer
+    /// resumes the recorder between the two events. Repeats of that held key
+    /// are passed only while the offer is still open; otherwise Enter/Space
+    /// could leak into the resumed recorder as a new shortcut.
+    struct PausedKeyRouter {
+        enum Phase { case down, up }
+        enum Route: Equatable { case pass, swallow, record }
+
+        private var passedKeyUps = Set<Int64>()
+
+        mutating func route(_ phase: Phase, keyCode: Int64,
+                            modifiers: GlobalShortcutModifiers,
+                            offerIsOpen: Bool) -> Route {
+            switch phase {
+            case .up:
+                if passedKeyUps.remove(keyCode) != nil { return .pass }
+                return offerIsOpen ? .swallow : .record
+            case .down:
+                if passedKeyUps.contains(keyCode) {
+                    return offerIsOpen && passesWhilePaused(keyCode: keyCode, modifiers: modifiers)
+                        ? .pass : .swallow
+                }
+                guard offerIsOpen else { return .record }
+                guard passesWhilePaused(keyCode: keyCode, modifiers: modifiers) else { return .swallow }
+                passedKeyUps.insert(keyCode)
+                return .pass
+            }
+        }
+
+        mutating func reset() { passedKeyUps.removeAll() }
     }
 
     /// Whether a combination is worth registering at all. A bare letter would
