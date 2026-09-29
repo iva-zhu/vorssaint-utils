@@ -2419,10 +2419,13 @@ final class CommandBarService: ObservableObject {
         recordingTapAvailable = ShortcutRecordingTap.begin { [weak self] keyCode, modifiers, _ in
             self?.handleCaptureKey(keyCode: keyCode, modifiers: modifiers)
         }
-        // A fresh capture starts with a clean fallback drain: the tap, when
-        // it exists, owns the debts, and a stale monitor-side debt would
-        // only swallow presses the keyboard no longer holds.
-        if !recordingTapAvailable { fallbackRouter.reset() }
+        // With the tap the drain lives there; without it the panel's
+        // monitors do, through `fallbackRouter` — and then the debts stay:
+        // a forwarded key may still be held (the offer accepted with
+        // Return, the next capture opened before its release), and its
+        // release must follow the press. A tap switch is the only reset:
+        // monitor-side debts are dead the moment the tap owns the drain.
+        if recordingTapAvailable { fallbackRouter.reset() }
         mode = .capturingShortcut(entryID: entry.id)
         aliasWarning = nil
         refreshPanelLayout()
@@ -3374,11 +3377,9 @@ final class CommandBarService: ObservableObject {
                 case .swallow:
                     return nil
                 case .pass:
-                    // Escape still means "never mind" while the offer
-                    // stands; every other offered key goes on to the
-                    // buttons the focus walk reaches.
-                    if capturing, self.pendingRowTakeOver[.captureCard] != nil,
-                       Int(event.keyCode) == kVK_Escape { break }
+                    // An offered key goes on to the buttons the focus walk
+                    // reaches. (Escape never gets here: the router hands it
+                    // to the capture as a swallowed pair.)
                     return event
                 case .record:
                     break
