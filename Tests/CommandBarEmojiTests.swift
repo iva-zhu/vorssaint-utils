@@ -511,5 +511,79 @@ enum EmojiGridContract {
                          && bystander.drainGeneration == askedBystander,
                          "a press the drain does not owe passes through and keeps the snapshot live")
         }
+
+        suite.run("emoji fallback drain") {
+            // The monitor-side twin of the tap's drain: what the panel's
+            // own key monitor owes when the recording tap could not exist.
+            // Same promise — repeats suppressed, release forwarded, a lost
+            // release never swallowing fresh presses.
+            let bare = GlobalShortcutModifiers()
+            let returnCode = Int64(kVK_Return)
+
+            var router = CommandBarRowShortcuts.FallbackKeyRouter()
+            suite.expect(router.routeDown(keyCode: returnCode, modifiers: bare,
+                                          offerIsOpen: true,
+                                          keyIsPhysicallyDown: true) == .pass
+                         && !router.isEmpty,
+                         "a forwarded press reaches the offer's buttons and owes its release")
+            suite.expect(router.routeDown(keyCode: returnCode, modifiers: bare,
+                                          offerIsOpen: false,
+                                          keyIsPhysicallyDown: true) == .swallow,
+                         "repeats of a forwarded key stay suppressed after the offer closes")
+            router.noteKeyUp(returnCode)
+            suite.expect(router.isEmpty,
+                         "the forwarded key's release settles its debt")
+            suite.expect(router.routeDown(keyCode: returnCode, modifiers: bare,
+                                          offerIsOpen: false,
+                                          keyIsPhysicallyDown: true) == .record,
+                         "a fresh press records again once the debt is settled")
+
+            // A lost keyUp must not swallow fresh presses forever: the
+            // keyboard no longer holding the forwarded key clears the debt
+            // before this press routes, while a re-press of a key the
+            // keyboard still holds stays suppressed.
+            var lost = CommandBarRowShortcuts.FallbackKeyRouter()
+            lost.routeDown(keyCode: returnCode, modifiers: bare,
+                           offerIsOpen: true, keyIsPhysicallyDown: true)
+            suite.expect(lost.routeDown(keyCode: returnCode, modifiers: bare,
+                                        offerIsOpen: false,
+                                        keyIsPhysicallyDown: false) == .record
+                         && lost.isEmpty,
+                         "a fresh press of a key the keyboard no longer holds clears the stale debt")
+            lost.routeDown(keyCode: returnCode, modifiers: bare,
+                           offerIsOpen: true, keyIsPhysicallyDown: true)
+            suite.expect(lost.routeDown(keyCode: returnCode, modifiers: bare,
+                                        offerIsOpen: false,
+                                        keyIsPhysicallyDown: true) == .swallow,
+                         "a re-press of a still-held forwarded key stays suppressed")
+            lost.noteKeyUp(returnCode)
+            suite.expect(lost.isEmpty, "the re-earned debt still ends with its release")
+
+            // The offer's own rules hold: a stranger stays swallowed, a
+            // modifier-led key never reaches the buttons, Escape keeps its
+            // way out, and a declined offer leaves the next press free.
+            var offer = CommandBarRowShortcuts.FallbackKeyRouter()
+            suite.expect(offer.routeDown(keyCode: Int64(kVK_ANSI_A), modifiers: bare,
+                                         offerIsOpen: true,
+                                         keyIsPhysicallyDown: true) == .swallow,
+                         "a stranger stays swallowed while the offer stands")
+            suite.expect(offer.routeDown(keyCode: Int64(kVK_RightArrow), modifiers: [.shift],
+                                         offerIsOpen: true,
+                                         keyIsPhysicallyDown: true) == .swallow,
+                         "a modifier-led key never reaches the buttons")
+            suite.expect(offer.routeDown(keyCode: Int64(kVK_Escape), modifiers: bare,
+                                         offerIsOpen: true,
+                                         keyIsPhysicallyDown: true) == .pass,
+                         "Escape passes to the offer's way out and owes its release")
+            suite.expect(offer.routeDown(keyCode: Int64(kVK_Escape), modifiers: bare,
+                                         offerIsOpen: true,
+                                         keyIsPhysicallyDown: true) == .swallow,
+                         "a held Escape's repeats stay suppressed while the offer waits")
+            offer.noteKeyUp(Int64(kVK_Escape))
+            suite.expect(offer.routeDown(keyCode: returnCode, modifiers: bare,
+                                         offerIsOpen: false,
+                                         keyIsPhysicallyDown: false) == .record,
+                         "with the offer declined a fresh press records again")
+        }
     }
 }
