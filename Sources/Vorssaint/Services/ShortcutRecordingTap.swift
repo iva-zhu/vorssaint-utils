@@ -23,11 +23,14 @@ enum ShortcutRecordingTap {
     private static var tap: CFMachPort?
     private static var runLoopSource: CFRunLoopSource?
     private static var handler: ((Int64, GlobalShortcutModifiers, CGEventFlags) -> Void)?
-    /// True while the field wants the keys paused (an offer is being
-    /// answered): events pass through to the app instead of the handler,
-    /// while the tap stays alive and `ShortcutCapture` keeps the app's own
-    /// global shortcuts quiet.
+    /// True while the field is paused at a take-over offer. Safe navigation
+    /// keys pass through to its buttons; bare Escape goes to the recording
+    /// handler so the tap can swallow the complete pair. The tap stays alive
+    /// and `ShortcutCapture` keeps the app's own global shortcuts quiet.
     private static var isPaused = false
+    /// Identifies the offer that owns forwarded navigation-key repeats. A
+    /// replacement offer must not inherit a key still held from the old one.
+    private static var pausedOfferID: UUID?
     /// Routes safe button-navigation events as matched keyDown/keyUp pairs.
     /// It also swallows autorepeats if a button action ends the pause while
     /// its activating key is still held.
@@ -55,6 +58,7 @@ enum ShortcutRecordingTap {
         drainingKeyCode = nil
         heldKeyCode = nil
         isPaused = false
+        pausedOfferID = nil
         // The router keeps its promise across a re-begin: a key the pause
         // let through before its release still owes that release, even
         // when a new capture starts first.
@@ -98,6 +102,7 @@ enum ShortcutRecordingTap {
     /// still down, the tap lingers just long enough to swallow its release.
     static func end() {
         isPaused = false
+        pausedOfferID = nil
         handler = nil
         guard tap != nil else { return }
         // Keys the pause already let reach the app owe their releases, even
@@ -120,9 +125,11 @@ enum ShortcutRecordingTap {
     /// activation. The tap itself stays alive (a rebuild would churn the
     /// system keyboard path, issue #275) and `ShortcutCapture` keeps the
     /// app's own global shortcuts quiet.
-    static func setPaused(_ paused: Bool) {
-        guard isPaused != paused else { return }
+    static func setPaused(_ paused: Bool, offerID: UUID? = nil) {
+        let nextOfferID = paused ? offerID : nil
+        guard isPaused != paused || pausedOfferID != nextOfferID else { return }
         isPaused = paused
+        pausedOfferID = nextOfferID
         if paused {
             // Any key still down belongs to the app from here on: its
             // release reaches the app, not this tap, so holding the record
@@ -143,9 +150,9 @@ enum ShortcutRecordingTap {
     }
 
     /// True once every drain is over: no recorded key still draining and no
-    /// key the pause let through still owing its release. The one rule both
-    /// release paths and the watchdog ask, so neither can stand the tap down
-    /// while the other still holds a key.
+    /// key the pause passed or swallowed still owing its release. The one rule
+    /// both release paths and the watchdog ask, so neither can stand the tap
+    /// down while the other still holds a key.
     private static var drainIsSettled: Bool {
         drainingKeyCode == nil && pausedKeyRouter.isEmpty
     }
@@ -200,10 +207,9 @@ enum ShortcutRecordingTap {
 
     /// Generations name a snapshot: a read that took longer than the events
     /// it was asked about re-checks against the drain it returns to, so a
-    /// late answer never drops a debt the drain has since re-earned. Every
-    /// event that re-earns a debt — a re-press of a key the drain owes, a
-    /// repeat of the draining key — bumps the generation here, and an
-    /// answer that still lands stale re-arms the check instead of applying.
+    /// late answer never drops a debt the drain has since changed. Every
+    /// routed key event bumps the generation; an answer that lands stale
+    /// re-arms the check instead of applying.
     private static var drainGeneration = 0
 
     /// Applies the keyboard's answer. Runs on main: the key codes it drops
@@ -238,6 +244,8 @@ enum ShortcutRecordingTap {
     private static func tearDown() {
         drainWatchdog?.cancel()
         drainWatchdog = nil
+        isPaused = false
+        pausedOfferID = nil
         drainingKeyCode = nil
         heldKeyCode = nil
         pausedKeyRouter.reset()
@@ -285,30 +293,34 @@ enum ShortcutRecordingTap {
                 type == .keyDown ? .down : .up,
                 keyCode: keyCode,
                 modifiers: GlobalShortcutModifiers(cgFlags: event.flags),
-                offerIsOpen: isPaused)
+                offerID: isPaused ? pausedOfferID : nil)
             switch route {
             case .pass:
-                // A release clears its own debt; the tap stands down only
-                // once every drain is over.
-                if handler == nil, type == .keyUp {
-                    drainGeneration += 1
-                    if drainIsSettled {
+                // A fresh event invalidates a keyboard snapshot already in
+                // flight. A release settles its pair; the tap stands down
+                // only once every drain is over.
+                drainGeneration += 1
+                if handler == nil {
+                    if type == .keyUp && drainIsSettled {
                         tearDown()
+                    } else {
+                        armDrainWatchdog()
                     }
                 }
                 return Unmanaged.passUnretained(event)
             case .swallow:
-                // A key the pause handed the app with its repeats still
-                // coming keeps the watchdog alive on them, the same way the
-                // recorded key's repeats did in the drain.
-                if handler == nil, type == .keyDown {
-                    // With the recording over, a swallowed press can only
-                    // belong to a key the drain still owes, so the press
-                    // re-earns that debt: a snapshot already reading the
-                    // keyboard as "up" names a drain that no longer is, and
-                    // its answer must never settle what was earned again.
-                    drainGeneration += 1
-                    armDrainWatchdog()
+                // Any event may re-earn or settle a debt while a stale
+                // snapshot is running, including during a newly begun capture.
+                drainGeneration += 1
+                if handler == nil {
+                    if type == .keyDown {
+                        // A repeat re-earns a debt; keep checking until release.
+                        armDrainWatchdog()
+                    } else {
+                        // A swallowed release settles its pair; keep the tap
+                        // only while another key still owes its release.
+                        if drainIsSettled { tearDown() } else { armDrainWatchdog() }
+                    }
                 }
                 return nil
             case .record: break

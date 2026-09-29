@@ -478,6 +478,7 @@ def main():
           + "    var tapIsAlive = true\n"
           + "    var sessionIsActive = true\n"
           + "    var isPaused = false\n"
+          + "    var pausedOfferID: UUID?\n"
           + "    var heldKeyCode: Int64?\n"
           + "    var drainingKeyCode: Int64?\n"
           + "    var drainGeneration = 0\n"
@@ -488,6 +489,7 @@ def main():
           + "    var pausedKeyRouter = CommandBarRowShortcuts.PausedKeyRouter()\n"
           + "    var superState = SuperKeySupport.State()\n"
           + "    var watchdogArms = 0\n"
+          + "    var tearDownCalls = 0\n"
           + "    var captureEndCalls = 0\n"
           + "    func armDrainWatchdog() { watchdogArms += 1 }\n"
           + "    func captureEnd() { captureEndCalls += 1 }\n"
@@ -495,6 +497,11 @@ def main():
             .replace("    private static var", "    var", 1)
           + declaration(tap, "    private static func tearDown() {")
             .replace("    private static func", "    func", 1)
+            .replace("        drainWatchdog = nil",
+                     "        drainWatchdog = nil\n        tearDownCalls += 1", 1)
+          + declaration(tap, "    static func end() {")
+            .replace("    static func", "    func", 1)
+            .replace("guard tap != nil else { return }", "guard tapIsAlive else { return }", 1)
           + declaration(tap, "    private static func applyKeyboardSnapshot(keyIsDown: [Int64: Bool],")
             .replace("    private static func", "    func", 1)
             .replace("guard tap != nil else { return }", "guard tapIsAlive else { return }", 1)
