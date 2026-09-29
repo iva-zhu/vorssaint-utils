@@ -563,14 +563,37 @@ enum EmojiGridContract {
                          "a modifier-led key never reaches the buttons")
             suite.expect(offer.routeDown(keyCode: Int64(kVK_Escape), modifiers: bare,
                                          offerIsOpen: true, captureIsActive: true,
-                                         isRepeat: false) == .pass,
-                         "Escape passes to the offer's way out and owes its release")
-            suite.expect(offer.routeUp(Int64(kVK_Escape)) == .pass,
-                         "the offer's Escape ends as a complete pair")
+                                         isRepeat: false) == .record,
+                         "Escape stays with the capture: the app never sees the press")
+            suite.expect(offer.routeDown(keyCode: Int64(kVK_Escape), modifiers: bare,
+                                         offerIsOpen: true, captureIsActive: true,
+                                         isRepeat: true) == .swallow,
+                         "a held Escape's repeats stay suppressed while the offer waits")
+            suite.expect(offer.routeUp(Int64(kVK_Escape)) == .swallow,
+                         "the offer's Escape ends as a swallowed pair")
             suite.expect(offer.routeDown(keyCode: returnCode, modifiers: bare,
                                          offerIsOpen: false, captureIsActive: false,
                                          isRepeat: false) == .record,
                          "with the offer declined a fresh press records again")
+
+            // A new capture may start while a forwarded key is still held
+            // (the offer accepted with Return, the next capture opened
+            // before its release): the debt crosses it — the repeat stays
+            // suppressed, the release still reaches the app, and only a
+            // fresh press after that belongs to the person again.
+            var carried = CommandBarRowShortcuts.FallbackKeyRouter()
+            carried.routeDown(keyCode: returnCode, modifiers: bare,
+                              offerIsOpen: true, captureIsActive: true, isRepeat: false)
+            suite.expect(carried.routeDown(keyCode: returnCode, modifiers: bare,
+                                           offerIsOpen: false, captureIsActive: true,
+                                           isRepeat: true) == .swallow,
+                         "a forwarded key repeats suppressed into the next capture")
+            suite.expect(carried.routeUp(returnCode) == .pass && carried.isEmpty,
+                         "the carried release still goes to the app and ends the debt")
+            suite.expect(carried.routeDown(keyCode: returnCode, modifiers: bare,
+                                           offerIsOpen: false, captureIsActive: true,
+                                           isRepeat: false) == .record,
+                         "a fresh press in the new capture is the person's again")
 
             // A recorded combination that saved straight away, with no
             // offer: the capture handles the press, and the hold it leaves

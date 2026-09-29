@@ -182,8 +182,10 @@ enum CommandBarRowShortcuts {
     /// The panel-monitor drain for a recording whose event tap could not
     /// exist (no Accessibility). Without the tap the local monitor owns the
     /// offer's keys: a safe keyDown that reaches the app owes its release,
-    /// a keyDown the recording or the offer swallowed keeps its repeats and
-    /// release, and both kinds of debt outlive the recording — until their
+    /// a keyDown the recording or the offer swallowed (Escape included —
+    /// the capture handles it, the app never sees the press) keeps its
+    /// repeats and release, and both kinds of debt outlive the recording —
+    /// across a new capture started before the release, too — until their
     /// own release, or until a fresh press of that key arrives, which is a
     /// new press, not the hold (a lost keyUp never swallows fresh presses).
     /// The tap-based drain does the same inside `ShortcutRecordingTap`;
@@ -227,6 +229,13 @@ enum CommandBarRowShortcuts {
             forwarded.remove(keyCode)
             swallowed.remove(keyCode)
             if offerIsOpen {
+                if Int(keyCode) == Int(kVK_Escape) {
+                    // Escape still means "never mind", and the capture
+                    // handles it: the app never sees the press, so the pair
+                    // stays swallowed and ends at the release.
+                    swallowed.insert(keyCode)
+                    return .record
+                }
                 if CommandBarRowShortcuts.passesWhilePaused(keyCode: keyCode,
                                                             modifiers: modifiers) {
                     forwarded.insert(keyCode)
