@@ -141,7 +141,10 @@ final class CommandBarService: ObservableObject {
     /// The emoji grid's own key. Unlike the bar's field key this one never
     /// opens the field: it lands on the tiles, and takes the combination over
     /// from the system emoji picker when the person accepts the offer.
-    private let emojiHotkey = QuickToolHotkey(id: 25)
+    /// Id 11 sits outside the 25+ range the capture tools count up from —
+    /// the shared handler routes by id, so a shared id would let the
+    /// capture tools' sync drop this hotkey out of its route.
+    private let emojiHotkey = QuickToolHotkey(id: 11)
     private var rowHotkeys: [QuickToolHotkey] = []
     private var panel: NSPanel?
     private var keyMonitor: Any?
