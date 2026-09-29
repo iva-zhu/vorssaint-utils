@@ -164,6 +164,19 @@ enum CommandBarRowShortcuts {
         }
 
         mutating func reset() { passedKeyUps.removeAll() }
+
+        /// True while no key the pause let through still owes its release.
+        var isEmpty: Bool { passedKeyUps.isEmpty }
+
+        /// The key codes whose release is still owed.
+        var owedKeyCodes: Set<Int64> { passedKeyUps }
+
+        /// Drops only the named key's debt: a release the tab technically
+        /// owes but the keyboard no longer holds is a lost keyUp, not a key
+        /// still held, and must stop costing the app its tap.
+        mutating func settleOwedRelease(_ keyCode: Int64) {
+            passedKeyUps.remove(keyCode)
+        }
     }
 
     /// Whether a combination is worth registering at all. A bare letter would

@@ -374,6 +374,75 @@ enum EmojiGridContract {
                                                      offerIsOpen: false) == .record,
                           "accepting while Return is held passes its release and swallows repeats")
 
+            // Accepting the offer while holding Return ends the recording
+            // before the release arrives (`end` keeps this promise). The
+            // tap then routes with the recording over and the offer closed:
+            // drains only. Repeats stay suppressed, the release forwards,
+            // and only the settled drain tears the tap down.
+            var acceptedAllTheWay = CommandBarRowShortcuts.PausedKeyRouter()
+            suite.expect(acceptedAllTheWay.route(.down, keyCode: Int64(kVK_Return), modifiers: bare,
+                                                 offerIsOpen: true) == .pass
+                         && !acceptedAllTheWay.isEmpty,
+                          "a press the pause forwarded owes its release across the recording's end")
+            suite.expect(acceptedAllTheWay.route(.down, keyCode: Int64(kVK_Return), modifiers: bare,
+                                                 offerIsOpen: false) == .swallow
+                         && acceptedAllTheWay.route(.down, keyCode: Int64(kVK_Return), modifiers: bare,
+                                                     offerIsOpen: false) == .swallow,
+                          "after the end the held key's autorepeats still stay suppressed")
+            suite.expect(acceptedAllTheWay.route(.up, keyCode: Int64(kVK_Return), modifiers: bare,
+                                                 offerIsOpen: false) == .pass
+                         && acceptedAllTheWay.isEmpty,
+                          "the owed release is the last thing the drain forwards")
+            suite.expect(acceptedAllTheWay.route(.down, keyCode: Int64(kVK_Return), modifiers: bare,
+                                                 offerIsOpen: false) == .record,
+                          "once the drain ends a fresh press records again")
+
+            // Two held keys settle independently, in either order: the tap
+            // stands down only when neither owes anything.
+            var twoHeld = CommandBarRowShortcuts.PausedKeyRouter()
+            suite.expect(twoHeld.route(.down, keyCode: Int64(kVK_Return), modifiers: bare,
+                                       offerIsOpen: true) == .pass
+                         && twoHeld.route(.down, keyCode: Int64(kVK_DownArrow), modifiers: bare,
+                                           offerIsOpen: true) == .pass,
+                          "two forwarded presses both owe their releases")
+            suite.expect(twoHeld.route(.down, keyCode: Int64(kVK_Return), modifiers: bare,
+                                        offerIsOpen: false) == .swallow
+                         && twoHeld.route(.down, keyCode: Int64(kVK_DownArrow), modifiers: bare,
+                                           offerIsOpen: false) == .swallow,
+                          "both held keys' repeats stay suppressed after the end")
+            suite.expect(twoHeld.route(.up, keyCode: Int64(kVK_DownArrow), modifiers: bare,
+                                       offerIsOpen: false) == .pass
+                         && !twoHeld.isEmpty,
+                          "the first release settles only its own key")
+            suite.expect(twoHeld.route(.up, keyCode: Int64(kVK_Return), modifiers: bare,
+                                       offerIsOpen: false) == .pass
+                         && twoHeld.isEmpty,
+                          "the last release settles the drain")
+
+            // A lost keyUp must not pin the tap forever: the watchdog drops
+            // the debt of a key the keyboard no longer holds, keeping every
+            // other key's debt — and one key's settling never settles
+            // another's.
+            var droppedRelease = CommandBarRowShortcuts.PausedKeyRouter()
+            droppedRelease.route(.down, keyCode: Int64(kVK_Return), modifiers: bare,
+                                 offerIsOpen: true)
+            droppedRelease.route(.down, keyCode: Int64(kVK_DownArrow), modifiers: bare,
+                                 offerIsOpen: true)
+            droppedRelease.settleOwedRelease(Int64(kVK_Return))
+            suite.expect(droppedRelease.owedKeyCodes == [Int64(kVK_DownArrow)],
+                          "a lost release clears only its own key's debt")
+            suite.expect(droppedRelease.route(.up, keyCode: Int64(kVK_DownArrow), modifiers: bare,
+                                               offerIsOpen: false) == .pass
+                         && droppedRelease.isEmpty,
+                          "the still-owed release keeps its rescue path and forwards")
+            var freshAfterDrop = CommandBarRowShortcuts.PausedKeyRouter()
+            freshAfterDrop.route(.down, keyCode: Int64(kVK_Return), modifiers: bare,
+                                 offerIsOpen: true)
+            freshAfterDrop.settleOwedRelease(Int64(kVK_Return))
+            suite.expect(freshAfterDrop.route(.down, keyCode: Int64(kVK_Return), modifiers: bare,
+                                               offerIsOpen: false) == .record,
+                          "settling a dropped debt lets a fresh press record again")
+
             var offers = CommandBarRowShortcuts.TakeOverOffers<String>()
             offers[.captureCard] = "card offer"
             offers[.appShortcutsSettings] = "settings offer"
@@ -381,6 +450,66 @@ enum EmojiGridContract {
             suite.expect(offers[.captureCard] == "card offer"
                          && offers[.appShortcutsSettings] == nil,
                          "answering one surface's offer leaves the other surface's offer alone")
+        }
+
+        suite.run("emoji drain snapshot race") {
+            // The real tap bodies run against a stub state: no tap, no
+            // keyboard, no run loop. The race: the watchdog reads a key as
+            // "up" (its release was lost), and before that answer lands the
+            // key is pressed again — the answer names a drain that has
+            // since been re-earned, and must never settle it.
+            func key(_ down: Bool, _ code: Int64) -> CGEvent {
+                CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(code), keyDown: down)!
+            }
+            let returnCode = Int64(kVK_Return)
+
+            // A key the pause forwarded still owes its release when the
+            // recording ends; its re-press is swallowed and re-earns it.
+            let repress = ShortcutRecordingTapContract.Host()
+            suite.expect(repress.pausedKeyRouter.route(.down, keyCode: returnCode,
+                                                       modifiers: [], offerIsOpen: true) == .pass,
+                         "a forwarded press earns its debt")
+            let asked = repress.drainGeneration
+            suite.expect(repress.handle(type: .keyDown, event: key(true, returnCode)) == nil
+                         && repress.drainGeneration == asked + 1,
+                         "a re-press of an owed key is swallowed and invalidates the snapshot in flight")
+            repress.applyKeyboardSnapshot(keyIsDown: [returnCode: false], draining: nil,
+                                          generation: asked)
+            suite.expect(!repress.pausedKeyRouter.isEmpty && repress.watchdogArms >= 1,
+                         "the stale answer settles nothing and keeps the re-check coming")
+            repress.applyKeyboardSnapshot(keyIsDown: [returnCode: false], draining: nil,
+                                          generation: asked + 1)
+            suite.expect(repress.pausedKeyRouter.isEmpty && repress.tap == nil
+                         && repress.drainGeneration == asked + 2,
+                         "the fresh answer settles the debt and stands the tap down")
+
+            // The recorded key itself, left draining by `end`, races the
+            // same way.
+            let draining = ShortcutRecordingTapContract.Host()
+            draining.drainingKeyCode = returnCode
+            let askedWhileDraining = draining.drainGeneration
+            suite.expect(draining.handle(type: .keyDown, event: key(true, returnCode)) == nil
+                         && draining.drainGeneration == askedWhileDraining + 1,
+                         "a re-press of the draining key re-earns its debt")
+            draining.applyKeyboardSnapshot(keyIsDown: [returnCode: false],
+                                           draining: returnCode, generation: askedWhileDraining)
+            suite.expect(draining.drainingKeyCode == returnCode,
+                         "the stale answer must not stand the drain down mid-hold")
+            draining.applyKeyboardSnapshot(keyIsDown: [returnCode: false],
+                                           draining: returnCode,
+                                           generation: askedWhileDraining + 1)
+            suite.expect(draining.drainingKeyCode == nil
+                         && draining.drainGeneration == askedWhileDraining + 2,
+                         "the fresh answer clears the draining key and stands the tap down")
+
+            // A press the drain does not owe passes through untouched and
+            // leaves the snapshot live: only owed keys re-earn anything.
+            let bystander = ShortcutRecordingTapContract.Host()
+            bystander.drainingKeyCode = returnCode
+            let askedBystander = bystander.drainGeneration
+            suite.expect(bystander.handle(type: .keyDown, event: key(true, Int64(kVK_ANSI_A))) != nil
+                         && bystander.drainGeneration == askedBystander,
+                         "a press the drain does not owe passes through and keeps the snapshot live")
         }
     }
 }
