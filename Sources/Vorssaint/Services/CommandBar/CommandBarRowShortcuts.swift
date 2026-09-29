@@ -179,6 +179,63 @@ enum CommandBarRowShortcuts {
         }
     }
 
+    /// The panel-monitor drain for a recording whose event tap could not
+    /// exist (no Accessibility). Without the tap the local monitor owns the
+    /// offer's keys: a safe keyDown that reaches the app owes its release,
+    /// the debt outlives the recording — repeats of that key stay
+    /// suppressed and its release passes, whether the offer is still up or
+    /// already answered — and a debt the keyboard no longer holds clears
+    /// before a fresh press of that key is swallowed for it. The tap-based
+    /// drain does the same inside `ShortcutRecordingTap`; this is its
+    /// monitor-side twin. Pure, so the tests can walk it without a panel.
+    struct FallbackKeyRouter {
+        enum Route: Equatable { case pass, swallow, record }
+
+        private var debts = PausedKeyRouter()
+
+        mutating func routeDown(keyCode: Int64, modifiers: GlobalShortcutModifiers,
+                                offerIsOpen: Bool,
+                                keyIsPhysicallyDown: @autoclosure () -> Bool) -> Route {
+            if debts.owedKeyCodes.contains(keyCode) {
+                // Whether it is a repeat of the hold or a fresh press while
+                // the hold survived its lost release, the keyboard still
+                // names this key down: the debt lives, and the press stays
+                // suppressed until the release.
+                guard keyIsPhysicallyDown() else {
+                    // The release was lost (the panel closed mid-hold, say):
+                    // the debt names a hold that no longer is, and this
+                    // press is a fresh one.
+                    debts.settleOwedRelease(keyCode)
+                    return freshPress(keyCode: keyCode, modifiers: modifiers,
+                                      offerIsOpen: offerIsOpen)
+                }
+                return .swallow
+            }
+            return freshPress(keyCode: keyCode, modifiers: modifiers,
+                              offerIsOpen: offerIsOpen)
+        }
+
+        /// The release of a forwarded key: its debt clears and the event
+        /// passes on its way to the app. Any other keyUp passes too.
+        mutating func noteKeyUp(_ keyCode: Int64) {
+            debts.settleOwedRelease(keyCode)
+        }
+
+        var isEmpty: Bool { debts.isEmpty }
+
+        mutating func reset() { debts.reset() }
+
+        private mutating func freshPress(keyCode: Int64, modifiers: GlobalShortcutModifiers,
+                                         offerIsOpen: Bool) -> Route {
+            switch debts.route(.down, keyCode: keyCode, modifiers: modifiers,
+                               offerIsOpen: offerIsOpen) {
+            case .pass: return .pass
+            case .swallow: return .swallow
+            case .record: return .record
+            }
+        }
+    }
+
     /// Whether a combination is worth registering at all. A bare letter would
     /// take that letter away from every app on the Mac.
     static func isUsable(_ shortcut: GlobalShortcut) -> Bool {

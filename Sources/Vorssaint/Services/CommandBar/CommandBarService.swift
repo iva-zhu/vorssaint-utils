@@ -145,6 +145,8 @@ final class CommandBarService: ObservableObject {
     private var rowHotkeys: [QuickToolHotkey] = []
     private var panel: NSPanel?
     private var keyMonitor: Any?
+    /// The keyUp twin of `keyMonitor`, for the fallback drain's debts.
+    private var keyUpMonitor: Any?
     private var outsideClickMonitor: Any?
     private var localClickMonitor: Any?
     private var flagsMonitor: Any?
@@ -489,6 +491,12 @@ final class CommandBarService: ObservableObject {
         // Closing while listening for a combination must give every global key
         // back, or the whole app would go quiet until the next relaunch.
         if case .capturingShortcut = mode { endCapturingShortcut() }
+        // Without the tap the monitors own the fallback debts; with the panel
+        // gone they stop seeing events, so the debts would only swallow
+        // fresh presses of keys the keyboard no longer holds. (A physical
+        // hold survives the close in frontmost-app land — the one leak the
+        // fallback path cannot cover, and the reason the tap is preferred.)
+        if !recordingTapAvailable { fallbackRouter.reset() }
         // Clearing the field on the way out would otherwise rebuild the whole
         // browse list for a panel nobody can see.
         isTearingDown = true
@@ -2405,9 +2413,16 @@ final class CommandBarService: ObservableObject {
         // never reaches the local monitor. It quits Vorssaint instead of
         // landing on the card (issue #1193). When Accessibility cannot
         // create the tap, the monitor below still records as before.
-        ShortcutRecordingTap.begin { [weak self] keyCode, modifiers, _ in
+        // The result decides who owns the offer's keys: with the tap the
+        // drain lives there; without it the panel's monitors do, through
+        // `fallbackRouter`.
+        recordingTapAvailable = ShortcutRecordingTap.begin { [weak self] keyCode, modifiers, _ in
             self?.handleCaptureKey(keyCode: keyCode, modifiers: modifiers)
         }
+        // A fresh capture starts with a clean fallback drain: the tap, when
+        // it exists, owns the debts, and a stale monitor-side debt would
+        // only swallow presses the keyboard no longer holds.
+        if !recordingTapAvailable { fallbackRouter.reset() }
         mode = .capturingShortcut(entryID: entry.id)
         aliasWarning = nil
         refreshPanelLayout()
@@ -2486,6 +2501,11 @@ final class CommandBarService: ObservableObject {
     /// out. Every transition below addresses a single slot.
     @Published private(set) var pendingRowTakeOver =
         CommandBarRowShortcuts.TakeOverOffers<PendingRowTakeOver>()
+    /// Whether the recording tap could exist. When it could not (no
+    /// Accessibility), the panel's monitors own the offer's keys and the
+    /// debts a forwarded keyDown hands out, through `fallbackRouter`.
+    private var recordingTapAvailable = true
+    private var fallbackRouter = CommandBarRowShortcuts.FallbackKeyRouter()
 
     func moveActionSelection(_ delta: Int) {
         let count = actionRows.count
@@ -3334,6 +3354,37 @@ final class CommandBarService: ObservableObject {
             // speaks, so composition always wins.
             if self.fieldIsComposing(in: panel) { return event }
 
+            // Without the recording tap the monitors own the offer's keys:
+            // the same pause policy, plus the debts a forwarded keyDown
+            // hands out. A debt outlives the recording — repeats of that
+            // key stay suppressed and its release passes, whether the offer
+            // is still up or already answered — and a debt the keyboard no
+            // longer holds clears before a fresh press of that key is
+            // swallowed for it. (The tap-based drain does the same inside
+            // the tap; this is its monitor-side twin.)
+            if !self.recordingTapAvailable {
+                let offerIsOpen = self.pendingRowTakeOver[.captureCard] != nil
+                var capturing = false
+                if case .capturingShortcut = self.mode { capturing = true }
+                switch self.fallbackRouter.routeDown(
+                    keyCode: Int64(event.keyCode),
+                    modifiers: GlobalShortcutModifiers(eventFlags: event.modifierFlags),
+                    offerIsOpen: offerIsOpen,
+                    keyIsPhysicallyDown: CGEventSource.keyState(
+                        .hidSystemState, key: CGKeyCode(event.keyCode))) {
+                case .swallow:
+                    return nil
+                case .pass:
+                    // Escape still means "never mind" while the offer
+                    // stands; every other offered key goes on to the
+                    // buttons the focus walk reaches.
+                    if capturing, offerIsOpen, Int(event.keyCode) == kVK_Escape { break }
+                    return event
+                case .record:
+                    break
+                }
+            }
+
             // Listening for a combination: every key belongs to the person,
             // except the two that mean "never mind" and "take it off". The
             // recording tap is the primary path; this is the fallback when
@@ -3513,6 +3564,17 @@ final class CommandBarService: ObservableObject {
                 return event
             }
         }
+        // The fallback drain's debts live in these monitors: a key the offer
+        // handed the app owes its release here, and the release settles it.
+        // With the tap the drain is the tap's own; the monitors then only
+        // watch, and this stays a no-op.
+        keyUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyUp) { [weak self, weak panel] event in
+            guard let self, let panel, event.window === panel else { return event }
+            if !self.recordingTapAvailable {
+                self.fallbackRouter.noteKeyUp(Int64(event.keyCode))
+            }
+            return event
+        }
         flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             guard let self else { return event }
             let held = event.modifierFlags.contains(.command)
@@ -3554,6 +3616,10 @@ final class CommandBarService: ObservableObject {
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
             self.keyMonitor = nil
+        }
+        if let keyUpMonitor {
+            NSEvent.removeMonitor(keyUpMonitor)
+            self.keyUpMonitor = nil
         }
         if let localClickMonitor {
             NSEvent.removeMonitor(localClickMonitor)
