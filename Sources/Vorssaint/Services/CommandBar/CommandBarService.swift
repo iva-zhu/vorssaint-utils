@@ -3355,30 +3355,30 @@ final class CommandBarService: ObservableObject {
             if self.fieldIsComposing(in: panel) { return event }
 
             // Without the recording tap the monitors own the offer's keys:
-            // the same pause policy, plus the debts a forwarded keyDown
-            // hands out. A debt outlives the recording — repeats of that
-            // key stay suppressed and its release passes, whether the offer
-            // is still up or already answered — and a debt the keyboard no
-            // longer holds clears before a fresh press of that key is
-            // swallowed for it. (The tap-based drain does the same inside
-            // the tap; this is its monitor-side twin.)
+            // the same pause policy, plus the debts a keyDown hands out. A
+            // forwarded key's repeats stay suppressed once the offer closes
+            // and its release passes to the app; a swallowed key keeps its
+            // repeats and release with the recording; a fresh press is
+            // never swallowed for a debt whose release the monitor never
+            // saw. (The tap-based drain does the same inside the tap; this
+            // is its monitor-side twin.)
             if !self.recordingTapAvailable {
-                let offerIsOpen = self.pendingRowTakeOver[.captureCard] != nil
                 var capturing = false
                 if case .capturingShortcut = self.mode { capturing = true }
                 switch self.fallbackRouter.routeDown(
                     keyCode: Int64(event.keyCode),
                     modifiers: GlobalShortcutModifiers(eventFlags: event.modifierFlags),
-                    offerIsOpen: offerIsOpen,
-                    keyIsPhysicallyDown: CGEventSource.keyState(
-                        .hidSystemState, key: CGKeyCode(event.keyCode))) {
+                    offerIsOpen: self.pendingRowTakeOver[.captureCard] != nil,
+                    captureIsActive: capturing,
+                    isRepeat: event.isARepeat) {
                 case .swallow:
                     return nil
                 case .pass:
                     // Escape still means "never mind" while the offer
                     // stands; every other offered key goes on to the
                     // buttons the focus walk reaches.
-                    if capturing, offerIsOpen, Int(event.keyCode) == kVK_Escape { break }
+                    if capturing, self.pendingRowTakeOver[.captureCard] != nil,
+                       Int(event.keyCode) == kVK_Escape { break }
                     return event
                 case .record:
                     break
@@ -3564,14 +3564,15 @@ final class CommandBarService: ObservableObject {
                 return event
             }
         }
-        // The fallback drain's debts live in these monitors: a key the offer
-        // handed the app owes its release here, and the release settles it.
+        // The fallback drain's debts live in these monitors: a forwarded
+        // key's release passes to the app, a swallowed one ends its hold.
         // With the tap the drain is the tap's own; the monitors then only
         // watch, and this stays a no-op.
         keyUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyUp) { [weak self, weak panel] event in
             guard let self, let panel, event.window === panel else { return event }
-            if !self.recordingTapAvailable {
-                self.fallbackRouter.noteKeyUp(Int64(event.keyCode))
+            if !self.recordingTapAvailable,
+               case .swallow = self.fallbackRouter.routeUp(Int64(event.keyCode)) {
+                return nil
             }
             return event
         }
