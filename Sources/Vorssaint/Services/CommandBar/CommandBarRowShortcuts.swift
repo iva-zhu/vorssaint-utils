@@ -182,57 +182,82 @@ enum CommandBarRowShortcuts {
     /// The panel-monitor drain for a recording whose event tap could not
     /// exist (no Accessibility). Without the tap the local monitor owns the
     /// offer's keys: a safe keyDown that reaches the app owes its release,
-    /// the debt outlives the recording — repeats of that key stay
-    /// suppressed and its release passes, whether the offer is still up or
-    /// already answered — and a debt the keyboard no longer holds clears
-    /// before a fresh press of that key is swallowed for it. The tap-based
-    /// drain does the same inside `ShortcutRecordingTap`; this is its
-    /// monitor-side twin. Pure, so the tests can walk it without a panel.
+    /// a keyDown the recording or the offer swallowed keeps its repeats and
+    /// release, and both kinds of debt outlive the recording — until their
+    /// own release, or until a fresh press of that key arrives, which is a
+    /// new press, not the hold (a lost keyUp never swallows fresh presses).
+    /// The tap-based drain does the same inside `ShortcutRecordingTap`;
+    /// this is its monitor-side twin. Pure, so the tests can walk it
+    /// without a panel.
     struct FallbackKeyRouter {
         enum Route: Equatable { case pass, swallow, record }
 
-        private var debts = PausedKeyRouter()
+        /// Keys whose keyDown the monitors let through to the app: the app
+        /// owns them until their release, and the release must follow it.
+        private var forwarded = Set<Int64>()
+        /// Keys whose keyDown the recording or the offer swallowed: their
+        /// repeats and release belong to that hold, not to the person.
+        private var swallowed = Set<Int64>()
 
         mutating func routeDown(keyCode: Int64, modifiers: GlobalShortcutModifiers,
-                                offerIsOpen: Bool,
-                                keyIsPhysicallyDown: @autoclosure () -> Bool) -> Route {
-            if debts.owedKeyCodes.contains(keyCode) {
-                // Whether it is a repeat of the hold or a fresh press while
-                // the hold survived its lost release, the keyboard still
-                // names this key down: the debt lives, and the press stays
-                // suppressed until the release.
-                guard keyIsPhysicallyDown() else {
-                    // The release was lost (the panel closed mid-hold, say):
-                    // the debt names a hold that no longer is, and this
-                    // press is a fresh one.
-                    debts.settleOwedRelease(keyCode)
-                    return freshPress(keyCode: keyCode, modifiers: modifiers,
-                                      offerIsOpen: offerIsOpen)
+                                offerIsOpen: Bool, captureIsActive: Bool,
+                                isRepeat: Bool) -> Route {
+            if isRepeat {
+                // A repeat belongs to whichever hold produced it, and the
+                // monitor sees the whole hold: nothing else can answer it.
+                if forwarded.contains(keyCode) {
+                    // The hold the offer handed over: with the offer up its
+                    // repeats still drive the buttons; once it closes they
+                    // belong to nobody and stay down.
+                    return offerIsOpen ? .pass : .swallow
                 }
+                if swallowed.contains(keyCode) { return .swallow }
+                if captureIsActive {
+                    // A hold that predates or survives this capture: the
+                    // recording owns it, the way the tap swallows every
+                    // repeat while a field records.
+                    swallowed.insert(keyCode)
+                    return .swallow
+                }
+                return .record
+            }
+            // A fresh press of a key we still owe or still hold is a press
+            // whose release the monitor never saw: the debt is dead, and
+            // this one routes as new.
+            forwarded.remove(keyCode)
+            swallowed.remove(keyCode)
+            if offerIsOpen {
+                if CommandBarRowShortcuts.passesWhilePaused(keyCode: keyCode,
+                                                            modifiers: modifiers) {
+                    forwarded.insert(keyCode)
+                    return .pass
+                }
+                swallowed.insert(keyCode)
                 return .swallow
             }
-            return freshPress(keyCode: keyCode, modifiers: modifiers,
-                              offerIsOpen: offerIsOpen)
-        }
-
-        /// The release of a forwarded key: its debt clears and the event
-        /// passes on its way to the app. Any other keyUp passes too.
-        mutating func noteKeyUp(_ keyCode: Int64) {
-            debts.settleOwedRelease(keyCode)
-        }
-
-        var isEmpty: Bool { debts.isEmpty }
-
-        mutating func reset() { debts.reset() }
-
-        private mutating func freshPress(keyCode: Int64, modifiers: GlobalShortcutModifiers,
-                                         offerIsOpen: Bool) -> Route {
-            switch debts.route(.down, keyCode: keyCode, modifiers: modifiers,
-                               offerIsOpen: offerIsOpen) {
-            case .pass: return .pass
-            case .swallow: return .swallow
-            case .record: return .record
+            if captureIsActive {
+                // The capture handles the press itself (it may save, offer
+                // or step back); the hold it leaves behind stays with the
+                // recording, the way `end` drains a key left held.
+                swallowed.insert(keyCode)
+                return .record
             }
+            return .record
+        }
+
+        /// The release of a forwarded key passes to the app; the release of
+        /// a swallowed one ends its hold instead. Any other keyUp passes.
+        mutating func routeUp(_ keyCode: Int64) -> Route {
+            if forwarded.remove(keyCode) != nil { return .pass }
+            if swallowed.remove(keyCode) != nil { return .swallow }
+            return .pass
+        }
+
+        var isEmpty: Bool { forwarded.isEmpty && swallowed.isEmpty }
+
+        mutating func reset() {
+            forwarded.removeAll()
+            swallowed.removeAll()
         }
     }
 
