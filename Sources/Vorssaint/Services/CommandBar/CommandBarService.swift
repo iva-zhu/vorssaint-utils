@@ -718,7 +718,8 @@ final class CommandBarService: ObservableObject {
     /// question is answered in a sheet whose recorder is not running, so it
     /// never pauses anything.
     private func syncRowTakeOverOfferPause() {
-        ShortcutRecordingTap.setPaused(pendingRowTakeOver[.captureCard] != nil)
+        let offer = pendingRowTakeOver[.captureCard]
+        ShortcutRecordingTap.setPaused(offer != nil, offerID: offer?.id)
     }
 
     /// The one write path for a row binding: the ordinary save, the offer's
@@ -2496,6 +2497,7 @@ final class CommandBarService: ObservableObject {
     /// own question: a Settings leave or a fresh capture takes its own offer
     /// down and never the other surface's.
     struct PendingRowTakeOver {
+        let id = UUID()
         let entry: CommandBarEntry
         let shortcut: GlobalShortcut
     }
@@ -3371,7 +3373,7 @@ final class CommandBarService: ObservableObject {
                 switch self.fallbackRouter.routeDown(
                     keyCode: Int64(event.keyCode),
                     modifiers: GlobalShortcutModifiers(eventFlags: event.modifierFlags),
-                    offerIsOpen: self.pendingRowTakeOver[.captureCard] != nil,
+                    offerID: self.pendingRowTakeOver[.captureCard]?.id,
                     captureIsActive: capturing,
                     isRepeat: event.isARepeat) {
                 case .swallow:

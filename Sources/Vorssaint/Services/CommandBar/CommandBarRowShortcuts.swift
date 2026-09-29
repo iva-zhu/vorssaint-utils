@@ -133,49 +133,67 @@ enum CommandBarRowShortcuts {
         }
     }
 
-    /// Routes keys at the take-over offer boundary. Once a safe keyDown has
-    /// reached the app, its keyUp must follow even if accepting the offer
-    /// resumes the recorder between the two events. Repeats of that held key
-    /// are passed only while the offer is still open; otherwise Enter/Space
-    /// could leak into the resumed recorder as a new shortcut.
+    /// Routes keys at the take-over offer boundary. Every keyDown the tap
+    /// passes or swallows owes its matching keyUp, even if the offer closes
+    /// first. Repeats are passed only to the offer that received the original
+    /// press; a later offer cannot inherit an old key's autorepeat.
     struct PausedKeyRouter {
         enum Phase { case down, up }
         enum Route: Equatable { case pass, swallow, record }
 
-        private var passedKeyUps = Set<Int64>()
+        /// Keys the app saw; their releases must also reach it.
+        private var passedKeyUps: [Int64: UUID] = [:]
+        /// Keys the tap swallowed; their releases must stay swallowed too.
+        private var swallowedKeyUps = Set<Int64>()
 
         mutating func route(_ phase: Phase, keyCode: Int64,
                             modifiers: GlobalShortcutModifiers,
-                            offerIsOpen: Bool) -> Route {
+                            offerID: UUID?) -> Route {
             switch phase {
             case .up:
-                if passedKeyUps.remove(keyCode) != nil { return .pass }
-                return offerIsOpen ? .swallow : .record
+                if passedKeyUps.removeValue(forKey: keyCode) != nil { return .pass }
+                if swallowedKeyUps.remove(keyCode) != nil { return .swallow }
+                return offerID == nil ? .record : .swallow
             case .down:
-                if passedKeyUps.contains(keyCode) {
-                    return offerIsOpen && passesWhilePaused(keyCode: keyCode, modifiers: modifiers)
+                if let originalOffer = passedKeyUps[keyCode] {
+                    return offerID == originalOffer
+                        && passesWhilePaused(keyCode: keyCode, modifiers: modifiers)
                         ? .pass : .swallow
                 }
-                guard offerIsOpen else { return .record }
-                guard passesWhilePaused(keyCode: keyCode, modifiers: modifiers) else { return .swallow }
-                passedKeyUps.insert(keyCode)
+                if swallowedKeyUps.contains(keyCode) { return .swallow }
+                guard let offerID else { return .record }
+                guard passesWhilePaused(keyCode: keyCode, modifiers: modifiers) else {
+                    swallowedKeyUps.insert(keyCode)
+                    return .swallow
+                }
+                // Escape is handled by the recording itself, not handed to
+                // the local monitor. The tap then drains its keyUp with the
+                // same held-key path as any other captured press.
+                if keyCode == Int64(kVK_Escape) { return .record }
+                passedKeyUps[keyCode] = offerID
                 return .pass
             }
         }
 
-        mutating func reset() { passedKeyUps.removeAll() }
+        mutating func reset() {
+            passedKeyUps.removeAll()
+            swallowedKeyUps.removeAll()
+        }
 
-        /// True while no key the pause let through still owes its release.
-        var isEmpty: Bool { passedKeyUps.isEmpty }
+        /// True while no passed or swallowed key still owes its release.
+        var isEmpty: Bool { passedKeyUps.isEmpty && swallowedKeyUps.isEmpty }
 
-        /// The key codes whose release is still owed.
-        var owedKeyCodes: Set<Int64> { passedKeyUps }
+        /// The key codes whose release the tap still owes or must swallow.
+        var owedKeyCodes: Set<Int64> {
+            Set(passedKeyUps.keys).union(swallowedKeyUps)
+        }
 
         /// Drops only the named key's debt: a release the tab technically
         /// owes but the keyboard no longer holds is a lost keyUp, not a key
         /// still held, and must stop costing the app its tap.
         mutating func settleOwedRelease(_ keyCode: Int64) {
-            passedKeyUps.remove(keyCode)
+            passedKeyUps.removeValue(forKey: keyCode)
+            swallowedKeyUps.remove(keyCode)
         }
     }
 
@@ -196,22 +214,21 @@ enum CommandBarRowShortcuts {
 
         /// Keys whose keyDown the monitors let through to the app: the app
         /// owns them until their release, and the release must follow it.
-        private var forwarded = Set<Int64>()
+        private var forwarded: [Int64: UUID] = [:]
         /// Keys whose keyDown the recording or the offer swallowed: their
         /// repeats and release belong to that hold, not to the person.
         private var swallowed = Set<Int64>()
 
         mutating func routeDown(keyCode: Int64, modifiers: GlobalShortcutModifiers,
-                                offerIsOpen: Bool, captureIsActive: Bool,
+                                offerID: UUID?, captureIsActive: Bool,
                                 isRepeat: Bool) -> Route {
             if isRepeat {
                 // A repeat belongs to whichever hold produced it, and the
                 // monitor sees the whole hold: nothing else can answer it.
-                if forwarded.contains(keyCode) {
-                    // The hold the offer handed over: with the offer up its
-                    // repeats still drive the buttons; once it closes they
-                    // belong to nobody and stay down.
-                    return offerIsOpen ? .pass : .swallow
+                if let originalOffer = forwarded[keyCode] {
+                    // Keep autorepeat inside the offer that received the
+                    // original press; a newly opened offer cannot inherit it.
+                    return offerID == originalOffer ? .pass : .swallow
                 }
                 if swallowed.contains(keyCode) { return .swallow }
                 if captureIsActive {
@@ -226,9 +243,9 @@ enum CommandBarRowShortcuts {
             // A fresh press of a key we still owe or still hold is a press
             // whose release the monitor never saw: the debt is dead, and
             // this one routes as new.
-            forwarded.remove(keyCode)
+            forwarded.removeValue(forKey: keyCode)
             swallowed.remove(keyCode)
-            if offerIsOpen {
+            if let offerID {
                 if Int(keyCode) == Int(kVK_Escape) {
                     // Escape still means "never mind", and the capture
                     // handles it: the app never sees the press, so the pair
@@ -238,7 +255,7 @@ enum CommandBarRowShortcuts {
                 }
                 if CommandBarRowShortcuts.passesWhilePaused(keyCode: keyCode,
                                                             modifiers: modifiers) {
-                    forwarded.insert(keyCode)
+                    forwarded[keyCode] = offerID
                     return .pass
                 }
                 swallowed.insert(keyCode)
@@ -257,7 +274,7 @@ enum CommandBarRowShortcuts {
         /// The release of a forwarded key passes to the app; the release of
         /// a swallowed one ends its hold instead. Any other keyUp passes.
         mutating func routeUp(_ keyCode: Int64) -> Route {
-            if forwarded.remove(keyCode) != nil { return .pass }
+            if forwarded.removeValue(forKey: keyCode) != nil { return .pass }
             if swallowed.remove(keyCode) != nil { return .swallow }
             return .pass
         }
