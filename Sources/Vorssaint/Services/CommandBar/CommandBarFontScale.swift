@@ -56,4 +56,12 @@ enum CommandBarFontScale: String, CaseIterable, Identifiable {
     static func clamped(_ value: Double) -> Double {
         min(max(value, range.lowerBound), range.upperBound)
     }
+
+    /// How far the panel's own frame follows the type: half of the type's
+    /// growth, so Huge reads as a bigger bar rather than a different one —
+    /// the full 1.4 next to a fixed 560 pt width is what crowds the rows.
+    /// Pure so the tests can pin it.
+    static func layoutScale(from raw: String?) -> CGFloat {
+        1 + (factor(from: raw) - 1) * 0.5
+    }
 }

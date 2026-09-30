@@ -232,6 +232,11 @@ enum EmojiGridContract {
             suite.expect(CommandBarEmojiTileSize.contentHeight(
                              itemCount: 26, columns: 5, tileHeight: mediumTileHeight) > 452,
                          "a grid taller than the ceiling scrolls instead of growing the panel")
+            let wide = 560 * CommandBarFontScale.layoutScale(from: "huge")
+            let wideColumns = CommandBarEmojiTileSize.columns(
+                availableWidth: wide, tileSize: .medium)
+            suite.expect(abs(wide - 672) < 0.5 && wideColumns == 6,
+                         "the huge step's wider panel fits another column of medium tiles: got \(wideColumns)")
         }
 
         suite.run("emoji grid arrow modifiers") {
@@ -925,6 +930,17 @@ enum FontScaleContract {
                          "an in-range value passes through the clamp untouched")
             suite.expect(CommandBarFontScale.clamped(-1) == CommandBarFontScale.range.lowerBound,
                          "a negative typed factor stops at the bottom edge")
+
+            suite.expect(CommandBarFontScale.layoutScale(from: "medium") == 1.0,
+                         "the medium step leaves the panel exactly its base size")
+            suite.expect(abs(CommandBarFontScale.layoutScale(from: "huge") - 1.2) < 0.001
+                         && abs(CommandBarFontScale.layoutScale(from: "large") - 1.1) < 0.001,
+                         "the type's growth reaches the panel's frame at half strength")
+            suite.expect(abs(CommandBarFontScale.layoutScale(from: "0.85") - 0.925) < 0.001,
+                         "the frame follows a hand-typed factor the same half way")
+            suite.expect(abs(CommandBarFontScale.layoutScale(from: "1.6") - 1.3) < 0.001
+                         && CommandBarFontScale.layoutScale(from: "bogus") == 1.0,
+                         "a clamped extreme carries into the frame and a bad value changes nothing")
 
             let baseline: [CGFloat] = [8, 9, 10.5, 13, 16, 17]
             suite.expect(baseline.allSatisfy { size in
