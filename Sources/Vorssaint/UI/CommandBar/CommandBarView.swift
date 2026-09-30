@@ -520,8 +520,13 @@ struct CommandBarView: View {
     /// catalog that builds it.
     private func emojiTile(_ entry: CommandBarEntry, index: Int, tile: CommandBarEmojiTileSize) -> some View {
         let parts = entry.title.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-        let glyph = parts.first.map(String.init) ?? ""
-        let name = entry.matchTitle ?? parts.dropFirst().joined(separator: " ")
+        // A title of one token has no glyph to speak of: the word itself is
+        // the caption, and putting it where the glyph goes would draw it the
+        // size of an emoji. Only the catalog's own "😀  name" shape is a tile.
+        let glyph = parts.count > 1 ? String(parts[0]) : ""
+        let name = entry.matchTitle ?? (parts.count > 1
+            ? parts.dropFirst().joined(separator: " ")
+            : parts.first.map(String.init) ?? "")
         let isSelected = index == service.selectedIndex
         return Button {
             service.run(entry, fromClick: true)

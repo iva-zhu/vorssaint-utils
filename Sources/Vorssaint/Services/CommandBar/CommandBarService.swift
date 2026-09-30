@@ -1973,10 +1973,16 @@ final class CommandBarService: ObservableObject {
     /// A typed query whose whole result set the emoji catalog produced: the
     /// grid serves it the same way, so a search of emoji looks like the
     /// browsing of them.
+    /// A typed query whose whole result set the emoji catalog produced: the
+    /// grid serves it the same way, so a search of emoji looks like the
+    /// browsing of them. The browser row itself is not catalog produce — its
+    /// title is a bare word, and a grid tile that took it for a glyph would
+    /// draw the word "Emoji" the size of an emoji.
     var isEmojiResultSet: Bool {
         activeCategory == nil
             && !rows.isEmpty
-            && rows.allSatisfy { CommandBarSource.emoji.idPrefix.map($0.id.hasPrefix) ?? false }
+            && rows.allSatisfy { $0.id != CommandBarPreferences.emojiBrowserRowID
+                                 && (CommandBarSource.emoji.idPrefix.map($0.id.hasPrefix) ?? false) }
     }
 
     /// Whether the arrow keys walk the tiles: the grid is showing and the
