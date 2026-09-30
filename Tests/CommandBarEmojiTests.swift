@@ -186,6 +186,7 @@ enum CommandBarEmojiContract {
                      "the chosen tone survives backup export and restore validation")
 
         EmojiGridContract.run(suite)
+        FontScaleContract.run(suite)
     }
 }
 
@@ -881,6 +882,55 @@ enum EmojiGridContract {
                     && recorded.routeUp(returnCode) == .swallow,
                 "the recorded key's repeats and release stay with the recording")
             suite.expect(recorded.isEmpty, "the recorded hold ends at its own release")
+        }
+    }
+}
+/// The bar's type scale, pinned without touching a view: what the stored
+/// preference reads back as, where a hand-typed factor stops, and the one
+/// rule the whole strip rests on — an unreadable value is the default, never
+/// a blank bar.
+enum FontScaleContract {
+    static func run(_ suite: TestSuite) {
+        suite.run("command bar font scale") {
+            suite.expect(CommandBarFontScale.resolved(raw: nil) == .medium,
+                         "a missing font scale reads as the medium default")
+            suite.expect(CommandBarFontScale.resolved(raw: "") == .medium,
+                         "an empty font scale reads as the medium default")
+            suite.expect(CommandBarFontScale.resolved(raw: "bogus") == .medium,
+                         "an unknown font scale reads as the medium default")
+            suite.expect(CommandBarFontScale.resolved(raw: "huge") == .huge
+                         && CommandBarFontScale.resolved(raw: "small") == .small,
+                         "a known font scale reads back as itself")
+
+            suite.expect(CommandBarFontScale.medium.factor == 1.0,
+                         "the medium step is exactly yesterday's bar")
+            suite.expect(CommandBarFontScale.allCases.allSatisfy { $0.factor > 0 },
+                         "no preset asks a font for a size a window cannot draw")
+
+            suite.expect(CommandBarFontScale.factor(from: "1.15") == 1.15,
+                         "a hand-typed factor is the factor stored")
+            suite.expect(CommandBarFontScale.factor(from: "0.00") == CommandBarFontScale.range.lowerBound,
+                         "a hand-typed zero stops at the bottom of the range")
+            suite.expect(CommandBarFontScale.factor(from: "42") == CommandBarFontScale.range.upperBound,
+                         "a hand-typed overshoot stops at the top of the range")
+            suite.expect(CommandBarFontScale.factor(from: "abc") == 1.0,
+                         "an unreadable hand-typed value is the medium default")
+            suite.expect(CommandBarFontScale.factor(from: nil) == 1.0
+                         && CommandBarFontScale.factor(from: "") == 1.0,
+                         "a missing preference is the medium default")
+
+            suite.expect(CommandBarFontScale.clamped(1.3) == 1.3
+                         && CommandBarFontScale.clamped(0.85) == 0.85
+                         && CommandBarFontScale.clamped(1.6) == 1.6,
+                         "an in-range value passes through the clamp untouched")
+            suite.expect(CommandBarFontScale.clamped(-1) == CommandBarFontScale.range.lowerBound,
+                         "a negative typed factor stops at the bottom edge")
+
+            let baseline: [CGFloat] = [8, 9, 10.5, 13, 16, 17]
+            suite.expect(baseline.allSatisfy { size in
+                CommandBarFontScale.huge.factor * size > size
+                    && CommandBarFontScale.small.factor * size >= 6
+            }, "every base size the bar draws survives both ends of the scale")
         }
     }
 }

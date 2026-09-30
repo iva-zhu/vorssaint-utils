@@ -37,6 +37,9 @@ struct CommandBarView: View {
     /// Watched, not read once: a tile size picked in Settings while the grid
     /// stands open re-lays it at once instead of waiting for the next opening.
     @AppStorage(DefaultsKey.commandBarEmojiTileSize) private var emojiTileSizeRaw = CommandBarEmojiTileSize.medium.rawValue
+    /// The bar's own type scale, watched for the same reason: a size picked
+    /// in Settings re-lays the standing panel at once.
+    @AppStorage(DefaultsKey.commandBarFontScale) private var fontScaleRaw = CommandBarFontScale.medium.rawValue
     @ObservedObject private var uninstaller = AppUninstaller.shared
     @ObservedObject private var homebrew = HomebrewManager.shared
     @Environment(\.colorScheme) private var colorScheme
@@ -114,6 +117,19 @@ struct CommandBarView: View {
     }
 
     private var text: CommandBarFeatureStrings { FeatureStrings.commandBar(l10n.language) }
+
+    /// The multiplier the whole strip's type is laid out through, read from
+    /// the stored preference on every render so a Settings change lands on
+    /// the standing panel at once.
+    private var fontScale: CGFloat { CommandBarFontScale.factor(from: fontScaleRaw) }
+
+    /// One font, scaled. Every point size in the panel goes through here, so
+    /// the type grows and shrinks as one voice instead of drifting apart.
+    private func barFont(_ size: CGFloat,
+                         weight: Font.Weight = .regular,
+                         design: Font.Design = .default) -> Font {
+        .system(size: size * fontScale, weight: weight, design: design)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -206,7 +222,7 @@ struct CommandBarView: View {
             if case .naming(let entryID) = service.mode,
                let entry = service.entry(withID: entryID) {
                 Text(entry.title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(barFont(12, weight: .semibold))
                     .foregroundStyle(Color.accentColor)
                     .lineLimit(1)
                     .padding(.horizontal, 8)
@@ -216,7 +232,7 @@ struct CommandBarView: View {
             if case .argument(let entryID) = service.mode,
                let entry = service.entry(withID: entryID) {
                 Text(entry.title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(barFont(12, weight: .semibold))
                     .foregroundStyle(Color.accentColor)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
@@ -224,7 +240,7 @@ struct CommandBarView: View {
             }
             TextField(fieldPlaceholder, text: $service.query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 16))
+                .font(barFont(16))
                 .focused($searchFocused)
                 .disableAutocorrection(true)
                 .accessibilityLabel(text.pageTitle)
@@ -234,7 +250,7 @@ struct CommandBarView: View {
                     service.query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
+                        .font(barFont(13))
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
@@ -249,11 +265,11 @@ struct CommandBarView: View {
     private var compactHints: some View {
         HStack(spacing: 4) {
             Text("↓")
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .font(barFont(9, weight: .semibold, design: .rounded))
             Text(text.suggestionsLabel)
-                .font(.system(size: 9))
+                .font(barFont(9))
             Text("Esc")
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .font(barFont(9, weight: .semibold, design: .rounded))
                 .padding(.leading, 4)
         }
         .foregroundStyle(.tertiary)
@@ -266,7 +282,7 @@ struct CommandBarView: View {
     private var actionsList: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(text.actionsTitle.uppercased())
-                .font(.system(size: 9, weight: .bold))
+                .font(barFont(9, weight: .bold))
                 .tracking(0.5)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 16)
@@ -279,16 +295,16 @@ struct CommandBarView: View {
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: action.symbolName)
-                                .font(.system(size: 13.5, weight: .semibold))
+                                .font(barFont(13.5, weight: .semibold))
                                 .foregroundStyle(action.isDestructive
                                                  ? Color.red : Color.primary.opacity(0.85))
-                                .frame(width: 30, height: 30)
+                                .frame(width: 30 * fontScale, height: 30 * fontScale)
                             Text(action.title)
-                                .font(.system(size: 13, weight: .medium))
+                                .font(barFont(13, weight: .medium))
                                 .foregroundStyle(action.isDestructive ? Color.red : Color.primary)
                             Spacer(minLength: 12)
                             Image(systemName: "return")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(barFont(10, weight: .semibold))
                                 .foregroundStyle(.tertiary)
                                 .opacity(index == service.actionIndex ? 1 : 0)
                         }
@@ -320,14 +336,14 @@ struct CommandBarView: View {
                 HStack(spacing: 10) {
                     iconView(entry)
                     Text(entry.title)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(barFont(13, weight: .medium))
                     Spacer()
                 }
                 .padding(.horizontal, 17)
                 .padding(.top, 12)
             }
             Text(service.aliasWarning ?? text.argumentHint)
-                .font(.system(size: 10.5))
+                .font(barFont(10.5))
                 .foregroundStyle(service.aliasWarning == nil
                                  ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.orange))
                 .padding(.horizontal, 17)
@@ -350,11 +366,11 @@ struct CommandBarView: View {
                 HStack(spacing: 10) {
                     iconView(entry)
                     Text(entry.title)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(barFont(13, weight: .medium))
                     Spacer()
                     if let existing = service.rowShortcut(for: entry) {
                         Text(existing.displayString)
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .font(barFont(11, weight: .semibold, design: .rounded))
                             .foregroundStyle(Color.accentColor)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
@@ -365,7 +381,7 @@ struct CommandBarView: View {
                 .padding(.top, 12)
             }
             Text(service.aliasWarning ?? text.shortcutCaptureHint)
-                .font(.system(size: 10.5))
+                .font(barFont(10.5))
                 .foregroundStyle(service.aliasWarning == nil
                                  ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.orange))
                 .padding(.horizontal, 17)
@@ -463,7 +479,7 @@ struct CommandBarView: View {
                 // one fills the field so it can be tried on the spot.
                 HStack(spacing: 5) {
                     Text(text.tryTheseLabel)
-                        .font(.system(size: 9, weight: .bold))
+                        .font(barFont(9, weight: .bold))
                         .tracking(0.5)
                         .foregroundStyle(.tertiary)
                     ForEach(CommandBarView.examples(text), id: \.self) { example in
@@ -471,7 +487,7 @@ struct CommandBarView: View {
                             service.query = example
                         } label: {
                             Text(example)
-                                .font(.system(size: 10, design: .rounded))
+                                .font(barFont(10, design: .rounded))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -587,6 +603,8 @@ struct CommandBarView: View {
                 // so a row of tiles stays as tall as its neighbors and the
                 // grid reads as one plate instead of a ragged rug.
                 Text(name)
+                    // The grid keeps its own size switcher; the bar's type
+                    // scale is deliberately not stacked on top of it.
                     .font(.system(size: 10))
                     .lineLimit(2)
                     .truncationMode(.tail)
@@ -640,10 +658,10 @@ struct CommandBarView: View {
             HStack(spacing: 3) {
                 if let source {
                     Image(systemName: source.symbolName)
-                        .font(.system(size: 8.5, weight: .semibold))
+                        .font(barFont(8.5, weight: .semibold))
                 }
                 Text(label)
-                    .font(.system(size: 10, weight: isActive ? .semibold : .regular))
+                    .font(barFont(10, weight: isActive ? .semibold : .regular))
             }
             // Tinted, never filled: white on a pale accent (yellow, orange in
             // light appearance) leaves the label invisible, and every other
@@ -663,7 +681,7 @@ struct CommandBarView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.system(size: 9, weight: .bold))
+            .font(barFont(9, weight: .bold))
             .tracking(0.5)
             .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -689,7 +707,7 @@ struct CommandBarView: View {
                 if service.commandIsHeld, index < 9 {
                     // Holding Command turns the list into nine numbered rows.
                     Text("⌘\(index + 1)")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .font(barFont(10, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color.accentColor)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2.5)
@@ -699,13 +717,13 @@ struct CommandBarView: View {
                         )
                 } else if let value = entry.answerValue {
                     Text(value)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(barFont(12, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color.accentColor)
                         .monospacedDigit()
                 } else if let shortcut = service.rowShortcut(for: entry)?.displayString
                             ?? entry.shortcut?.displayString ?? entry.menuShortcut {
                     Text(shortcut)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .font(barFont(10, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2.5)
@@ -715,7 +733,7 @@ struct CommandBarView: View {
                         )
                 }
                 Image(systemName: "return")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(barFont(10, weight: .semibold))
                     .foregroundStyle(.tertiary)
                     // Always laid out, only drawn on the selected row: without
                     // the reserved width every row shifted as the selection
@@ -761,7 +779,7 @@ struct CommandBarView: View {
     @ViewBuilder
     private func titleView(_ entry: CommandBarEntry) -> some View {
         if entry.isAnswer {
-            let font = Font.system(size: 17, weight: .semibold, design: .rounded)
+            let font = Font.system(size: 17 * fontScale, weight: .semibold, design: .rounded)
             Text(entry.title)
                 // Tabular digits keep a sum steady while typing; in a color
                 // value they leave gaps between letters and digits.
@@ -773,14 +791,14 @@ struct CommandBarView: View {
             let offsets = service.highlightOffsets(for: entry)
             if offsets.isEmpty {
                 Text(entry.title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(barFont(13, weight: .medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .help(entry.title)
             } else {
                 Text(highlighted(entry.title, offsets: offsets))
-                    .font(.system(size: 13, weight: .medium))
+                    .font(barFont(13, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -793,7 +811,7 @@ struct CommandBarView: View {
             var piece = AttributedString(String(character))
             if offsets.contains(index) {
                 piece.foregroundColor = Color.accentColor
-                piece.font = .system(size: 13, weight: .bold)
+                piece.font = .system(size: 13 * fontScale, weight: .bold)
             } else {
                 piece.foregroundColor = .primary
             }
@@ -807,12 +825,12 @@ struct CommandBarView: View {
         switch entry.trouble {
         case .needsSetup(let featureTitle, _):
             Text(String(format: text.needsSetupFormat, featureTitle))
-                .font(.system(size: 10.5))
+                .font(barFont(10.5))
                 .foregroundStyle(.orange)
                 .lineLimit(1)
         case .needsPermission:
             Text(text.needsPermissionHint)
-                .font(.system(size: 10.5))
+                .font(barFont(10.5))
                 .foregroundStyle(.orange)
                 .lineLimit(1)
         case nil:
@@ -821,7 +839,7 @@ struct CommandBarView: View {
             // of names instead of a wall of repetition.
             if !entry.subtitle.isEmpty {
                 Text(entry.subtitle)
-                    .font(.system(size: 10.5))
+                    .font(barFont(10.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -836,19 +854,19 @@ struct CommandBarView: View {
             if entry.usesPlateIcon {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(entry.isActive ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.06))
-                    .frame(width: 30, height: 30)
+                    .frame(width: 30 * fontScale, height: 30 * fontScale)
                     .overlay(iconContent(entry))
             } else {
                 iconContent(entry)
-                    .frame(width: 30, height: 30)
+                    .frame(width: 30 * fontScale, height: 30 * fontScale)
             }
             if entry.isActive {
                 Circle()
                     .fill(.green)
-                    .frame(width: 7, height: 7)
+                    .frame(width: 7 * fontScale, height: 7 * fontScale)
                     // A ring keeps the dot legible on top of a colorful icon.
                     .overlay(Circle().strokeBorder(Color(nsColor: .windowBackgroundColor), lineWidth: 1.2))
-                    .offset(x: 2.5, y: -2.5)
+                    .offset(x: 2.5 * fontScale, y: -2.5 * fontScale)
             }
         }
     }
@@ -858,24 +876,24 @@ struct CommandBarView: View {
         switch entry.icon {
         case .symbol(let name):
             Image(systemName: name)
-                .font(.system(size: 13.5, weight: .semibold))
+                .font(barFont(13.5, weight: .semibold))
                 .foregroundStyle(entry.isActive ? Color.accentColor : Color.primary.opacity(0.85))
         case .appIcon(let path):
             Image(nsImage: CommandBarIconCache.icon(forPath: path))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 28, height: 28)
+                .frame(width: 28 * fontScale, height: 28 * fontScale)
         case .clipboardImage(let name):
             ClipboardThumbnailImage(source: .stored(name: name), contentMode: .fill)
-                .frame(width: 28, height: 28)
+                .frame(width: 28 * fontScale, height: 28 * fontScale)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         case .filePath(let path):
             Image(nsImage: CommandBarIconCache.icon(forPath: path))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 28, height: 28)
+                .frame(width: 28 * fontScale, height: 28 * fontScale)
         case .color(let color):
-            ColorSwatch(color: color, size: 22)
+            ColorSwatch(color: color, size: 22 * fontScale)
         }
     }
 
@@ -888,13 +906,13 @@ struct CommandBarView: View {
                 .frame(width: 26, height: 26)
                 .padding(.bottom, 2)
             Text(text.noResultsTitle)
-                .font(.system(size: 12))
+                .font(barFont(12))
                 .foregroundStyle(.secondary)
             Button {
                 service.goHome()
             } label: {
                 Text(text.noResultsAction)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(barFont(11, weight: .semibold))
                     .foregroundStyle(Color.accentColor)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
@@ -912,14 +930,14 @@ struct CommandBarView: View {
                 HStack(spacing: 10) {
                     iconView(entry)
                     Text(entry.title)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(barFont(13, weight: .medium))
                     Spacer()
                 }
                 .padding(.horizontal, 17)
                 .padding(.top, 12)
             }
             Text(text.argumentHint)
-                .font(.system(size: 10.5))
+                .font(barFont(10.5))
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 17)
@@ -934,9 +952,9 @@ struct CommandBarView: View {
                     iconView(entry)
                     VStack(alignment: .leading, spacing: 1.5) {
                         Text(entry.confirmationPrompt ?? entry.title)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(barFont(13, weight: .semibold))
                         Text(text.confirmHint)
-                            .font(.system(size: 10.5))
+                            .font(barFont(10.5))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -996,7 +1014,7 @@ struct CommandBarView: View {
             ProgressView()
                 .controlSize(.small)
             Text(message)
-                .font(.system(size: 11))
+                .font(barFont(11))
                 .foregroundStyle(.secondary)
             if let target = uninstaller.target {
                 HStack(spacing: 7) {
@@ -1004,7 +1022,7 @@ struct CommandBarView: View {
                         .resizable()
                         .frame(width: 18, height: 18)
                     Text(target.name)
-                        .font(.system(size: 11.5, weight: .medium))
+                        .font(barFont(11.5, weight: .medium))
                         .lineLimit(1)
                 }
             }
@@ -1059,7 +1077,7 @@ struct CommandBarView: View {
                 }
                 if let error = homebrew.errorMessage, !error.isEmpty {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 9.5))
+                        .font(barFont(9.5))
                         .foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 17)
@@ -1067,7 +1085,7 @@ struct CommandBarView: View {
             } else {
                 Label(String(format: l10n.s.uninstallerHomebrewPackageFormat, package.displayName),
                       systemImage: "shippingbox")
-                    .font(.system(size: 9.5))
+                    .font(barFont(9.5))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 17)
@@ -1084,10 +1102,10 @@ struct CommandBarView: View {
                     .frame(width: 26, height: 26)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(target.name)
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(barFont(12.5, weight: .semibold))
                         .lineLimit(1)
                     Text(target.bundleID ?? target.url.path)
-                        .font(.system(size: 9.5))
+                        .font(barFont(9.5))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -1096,10 +1114,10 @@ struct CommandBarView: View {
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 1) {
                 Text(Self.uninstallByteString(uninstaller.totalSize))
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(barFont(12, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                 Text(l10n.s.uninstallerFoundTitle)
-                    .font(.system(size: 9))
+                    .font(barFont(9))
                     .foregroundStyle(.secondary)
             }
         }
@@ -1110,7 +1128,7 @@ struct CommandBarView: View {
                                         category: AppUninstaller.Category) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(uninstallCategoryLabel(category).uppercased())
-                .font(.system(size: 9, weight: .semibold))
+                .font(barFont(9, weight: .semibold))
                 .foregroundStyle(.tertiary)
             ForEach(group) { item in
                 uninstallReviewRow(item)
@@ -1135,7 +1153,7 @@ struct CommandBarView: View {
                 .frame(width: 16, height: 16)
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.name)
-                    .font(.system(size: 11))
+                    .font(barFont(11))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 HStack(spacing: 5) {
@@ -1149,7 +1167,7 @@ struct CommandBarView: View {
                         .lineLimit(1)
                         .truncationMode(.head)
                 }
-                .font(.system(size: 9.5))
+                .font(barFont(9.5))
             }
             Spacer(minLength: 0)
             Button {
@@ -1161,7 +1179,7 @@ struct CommandBarView: View {
             .help(l10n.s.cleanerRevealInFinder)
             .accessibilityLabel(l10n.s.cleanerRevealInFinder)
             Text(Self.uninstallByteString(item.size))
-                .font(.system(size: 10))
+                .font(barFont(10))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
@@ -1173,9 +1191,9 @@ struct CommandBarView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(String(format: l10n.s.uninstallerSelectedFormat,
                             uninstaller.items.filter(\.include).count, uninstaller.items.count))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(barFont(11, weight: .medium))
                 Text(Self.uninstallByteString(uninstaller.selectedSize))
-                    .font(.system(size: 9.5))
+                    .font(barFont(9.5))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -1188,7 +1206,7 @@ struct CommandBarView: View {
                 Label(uninstaller.selectedHomebrewPackage == nil
                       ? l10n.s.uninstallerRemove : l10n.s.homebrewUninstall,
                       systemImage: "trash")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(barFont(11, weight: .semibold))
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
@@ -1202,12 +1220,12 @@ struct CommandBarView: View {
     private func uninstallReviewDone(freed: Int64, failed: [AppUninstaller.Leftover]) -> some View {
         VStack(spacing: 9) {
             Image(systemName: UninstallerSupport.doneSymbol(hasLeftovers: !failed.isEmpty))
-                .font(.system(size: 28))
+                .font(barFont(28))
                 .foregroundStyle(failed.isEmpty ? .green : .orange)
             Text(l10n.s.uninstallerDoneTitle)
-                .font(.system(size: 13, weight: .bold))
+                .font(barFont(13, weight: .bold))
             Text(String(format: l10n.s.uninstallerFreedFormat, Self.uninstallByteString(freed)))
-                .font(.system(size: 11))
+                .font(barFont(11))
                 .foregroundStyle(.secondary)
             if !failed.isEmpty {
                 UninstallFailureNote(items: failed, compact: true)
@@ -1258,9 +1276,9 @@ struct CommandBarView: View {
                         .frame(width: 26, height: 26)
                     VStack(alignment: .leading, spacing: 1.5) {
                         Text(l10n.s.homebrewConfirmUninstallTitle)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(barFont(13, weight: .semibold))
                         Text(String(format: l10n.s.homebrewConfirmUninstallBodyFormat, package.displayName))
-                            .font(.system(size: 10.5))
+                            .font(barFont(10.5))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -1288,38 +1306,38 @@ struct CommandBarView: View {
     private var footer: some View {
         HStack(spacing: 5) {
             Image(systemName: "keyboard")
-                .font(.system(size: 8.5))
+                .font(barFont(8.5))
                 .foregroundStyle(.tertiary)
             Text(GlobalShortcut.saved(for: DefaultsKey.commandBarShortcut,
                                       fallback: .commandBarDefault).displayString)
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .font(barFont(9, weight: .semibold, design: .rounded))
                 .foregroundStyle(.tertiary)
             Spacer()
             if service.canOpenActions {
                 Text("⌘K")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .font(barFont(9, weight: .semibold, design: .rounded))
                     .foregroundStyle(.tertiary)
                 Text(text.actionsHint)
-                    .font(.system(size: 9))
+                    .font(barFont(9))
                     .foregroundStyle(.tertiary)
                     .padding(.trailing, 4)
             }
             Text(service.isShowingSuggestions && !service.categoryChips.isEmpty ? "⌃P ⌃N ↑↓ ←→" : "⌃P ⌃N ↑↓")
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .font(barFont(9, weight: .semibold, design: .rounded))
                 .foregroundStyle(.tertiary)
             if service.selectedEntry?.id == "math.result" {
                 Text("⇥")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .font(barFont(9, weight: .semibold, design: .rounded))
                     .foregroundStyle(.tertiary)
                 Text(text.reuseHint)
-                    .font(.system(size: 9))
+                    .font(barFont(9))
                     .foregroundStyle(.tertiary)
             }
             Image(systemName: "return")
-                .font(.system(size: 8))
+                .font(barFont(8))
                 .foregroundStyle(.tertiary)
             Text("Esc")
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .font(barFont(9, weight: .semibold, design: .rounded))
                 .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 16)
