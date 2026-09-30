@@ -144,6 +144,16 @@ struct CommandBarView: View {
     /// the standing panel at once.
     private var fontScale: CGFloat { CommandBarFontScale.factor(from: fontScaleRaw) }
 
+    /// The frame follows the type at half strength, so the bar grows with
+    /// the setting without ever reading as a different panel.
+    private var layoutScale: CGFloat { CommandBarFontScale.layoutScale(from: fontScaleRaw) }
+
+    private var panelWidth: CGFloat { Self.panelBaseWidth * layoutScale }
+
+    /// The list's ceiling rides the same half-strength scale: a bar with
+    /// taller rows would otherwise just scroll sooner.
+    private var listCeiling: CGFloat { Self.listCeiling * layoutScale }
+
     /// One font, scaled. Every point size in the panel goes through here, so
     /// the type grows and shrinks as one voice instead of drifting apart.
     private func barFont(_ size: CGFloat,
@@ -210,7 +220,7 @@ struct CommandBarView: View {
                 footer
             }
         }
-        .frame(width: Self.panelBaseWidth)
+        .frame(width: panelWidth)
         .environment(\.colorScheme, shownAs == .window ? colorScheme : .dark)
         .background(backdrop)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -472,21 +482,21 @@ struct CommandBarView: View {
         let isEmojiGrid = service.isEmojiGridOpen || service.isEmojiResultSet
         let hasPermissionHint = isEmojiGrid && service.rows.contains { needsPermission(for: $0) }
         let tile = CommandBarEmojiTileSize.resolved(raw: emojiTileSizeRaw)
-        let gridHeaderHeight: CGFloat = hasPermissionHint ? 24 : 0
+        let gridHeaderHeight: CGFloat = hasPermissionHint ? 24 * fontScale : 0
         // Glyph box + caption + stack spacing + the tile's vertical inset.
-        let tileHeight = tile.glyphSize + 8 + 26 + 3 + 12
+        let tileHeight = tile.glyphSize + 8 + 26 * fontScale + 3 + 12
         let fullWidthColumns = CommandBarEmojiTileSize.columns(
-            availableWidth: Self.panelBaseWidth, tileSize: tile)
+            availableWidth: panelWidth, tileSize: tile)
         let fullWidthGridHeight = CommandBarEmojiTileSize.contentHeight(
             itemCount: service.rows.count, columns: fullWidthColumns, tileHeight: tileHeight,
             headerHeight: gridHeaderHeight)
         // A legacy scroller reserves space in the viewport. Count columns from
         // the width it leaves, but only when the grid actually needs scrolling.
         let hasLegacyScroller = NSScroller.preferredScrollerStyle == .legacy
-            && fullWidthGridHeight > Self.listCeiling
+            && fullWidthGridHeight > listCeiling
         let scrollerWidth = hasLegacyScroller
             ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
-        let gridAvailableWidth = Self.panelBaseWidth - scrollerWidth
+        let gridAvailableWidth = panelWidth - scrollerWidth
         let gridColumns = CommandBarEmojiTileSize.columns(
             availableWidth: gridAvailableWidth, tileSize: tile)
         let gridHeight = CommandBarEmojiTileSize.contentHeight(
@@ -523,14 +533,14 @@ struct CommandBarView: View {
             }
             ScrollViewReader { proxy in
                 let scroll = ScrollView(showsIndicators: isEmojiGrid
-                                        ? gridHeight > Self.listCeiling
+                                        ? gridHeight > listCeiling
                                         : service.rows.count > 14) {
                     if isEmojiGrid {
                         VStack(spacing: 0) {
                             if hasPermissionHint {
                                 Label(text.needsPermissionHint,
                                       systemImage: "exclamationmark.triangle.fill")
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(barFont(10, weight: .medium))
                                     .foregroundStyle(.orange)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.8)
@@ -546,14 +556,14 @@ struct CommandBarView: View {
                 }
                 Group {
                     if isEmojiGrid {
-                        scroll.frame(height: min(gridHeight, Self.listCeiling))
+                        scroll.frame(height: min(gridHeight, listCeiling))
                     } else {
                         // Preserve the row list's existing ideal-height and
                         // lazy-loading behavior.
                         scroll
-                            .frame(maxHeight: Self.listCeiling)
+                            .frame(maxHeight: listCeiling)
                             .fixedSize(horizontal: false, vertical: service.rows.count <= 14)
-                            .frame(minHeight: service.rows.count > 14 ? Self.listCeiling : nil)
+                            .frame(minHeight: service.rows.count > 14 ? listCeiling : nil)
                     }
                 }
                 .onChange(of: service.selectedIndex) { _, index in
@@ -624,14 +634,15 @@ struct CommandBarView: View {
                 // so a row of tiles stays as tall as its neighbors and the
                 // grid reads as one plate instead of a ragged rug.
                 Text(name)
-                    // The grid keeps its own size switcher; the bar's type
-                    // scale is deliberately not stacked on top of it.
-                    .font(.system(size: 10))
+                    // The grid's captions ride the bar's type scale; the
+                    // glyphs stay on the tile size switcher, so the two
+                    // settings never fight over the same dimension.
+                    .font(barFont(10))
                     .lineLimit(2)
                     .truncationMode(.tail)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(needsPermission ? Color.orange : Color.secondary)
-                    .frame(height: 26, alignment: .top)
+                    .frame(height: 26 * fontScale, alignment: .top)
             }
             .frame(width: tile.tileSize)
             .padding(.vertical, 6)
@@ -1066,7 +1077,7 @@ struct CommandBarView: View {
                 }
                 .padding(.horizontal, 17)
             }
-            .frame(maxHeight: Self.listCeiling - 90)
+            .frame(maxHeight: listCeiling - 90)
             Divider().padding(.horizontal, 17)
             uninstallHomebrewStatus
             uninstallReviewFooter
