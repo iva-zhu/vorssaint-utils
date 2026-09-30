@@ -599,6 +599,7 @@ enum DefaultsKey {
     static let commandBarPositionOffset = "commandBarPositionOffset" // "dx,dy" from the default spot
     static let commandBarEmojiSkinTone = "commandBarEmojiSkinTone" // "" is the yellow default
     static let commandBarEmojiTileSize = "commandBarEmojiTileSize" // small | medium | large tiles in the grid
+    static let commandBarFontScale = "commandBarFontScale" // small | medium | large | huge | a decimal factor
     static let commandBarEmojiShortcutEnabled = "commandBarEmojiShortcutEnabled" // the emoji grid's own global key
     static let commandBarEmojiShortcut = "commandBarEmojiShortcut" // the combination the grid answers
     // The folders a file search looks in, one per line, written with a tilde
@@ -1742,6 +1743,7 @@ enum Defaults {
         DefaultsKey.commandBarPositionOffset: "",
         DefaultsKey.commandBarEmojiSkinTone: "",
         DefaultsKey.commandBarEmojiTileSize: CommandBarEmojiTileSize.medium.rawValue,
+        DefaultsKey.commandBarFontScale: CommandBarFontScale.medium.rawValue,
         DefaultsKey.commandBarEmojiShortcutEnabled: false,
         DefaultsKey.commandBarEmojiShortcut: GlobalShortcut.commandBarEmojiDefault.storageValue,
         DefaultsKey.panelUtilityCommandBar: true,
