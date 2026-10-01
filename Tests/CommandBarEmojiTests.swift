@@ -45,7 +45,13 @@ enum CommandBarEmojiContract {
             EmojiQueryHabits.prepare(query, key: key, cache: &cache)
         }
     }
+    final class NotchService {
+        static let shared = NotchService()
+        var reactions: [NotchMascotReaction] = []
+        func reactMascot(_ reaction: NotchMascotReaction, after delay: TimeInterval = 0) { reactions.append(reaction) }
+    }
     final class Service {
+        typealias NotchService = CommandBarEmojiContract.NotchService
         typealias CommandBarEntry = CommandBarEmojiContract.CommandBarEntry
         typealias UserDefaults = CommandBarEmojiContract.UserDefaults
         typealias CommandBarCatalog = CommandBarEmojiContract.Catalog
@@ -64,6 +70,7 @@ enum CommandBarEmojiContract {
         var queryWhenRun = ""
         var selectionWhenRun = ""
         var selectedText = ""
+        var farewell = NotchMascotMood.idle
         func hide() { isVisible = false; query = ""; savedQuery = "" }
     }
 
@@ -150,11 +157,14 @@ enum CommandBarEmojiContract {
         defaults.removeObject(forKey: DefaultsKey.commandBarUsage)
         let row = Catalog.emojiEntries(bar: .enUS).first { $0.id == thumbID }!
         let normal = Service()
+        NotchService.shared.reactions = []
         normal.finish(row, value: nil)
         suite.expect(CommandBarUsage.decode(defaults.string(forKey: DefaultsKey.commandBarUsage))[thumbID]?.count == 1
                      && normal.queryMemory.boost(query: "thumb", id: thumbID) == 1
                      && !normal.isVisible,
                      "normal insertion still records usage and learning once before closing")
+        suite.expect(normal.farewell == .happy && NotchService.shared.reactions == [.celebrate],
+                     "a command run from the bar sends the companion home smiling, to hop for it")
         let shortcut = Service()
         shortcut.isVisible = false
         shortcut.query = ""
@@ -175,7 +185,10 @@ enum CommandBarEmojiContract {
         transient.keepsBarOpen = true
         let before = defaults.string(forKey: DefaultsKey.commandBarUsage)
         let open = Service()
+        NotchService.shared.reactions = []
         open.finish(transient, value: nil)
+        suite.expect(NotchService.shared.reactions.isEmpty,
+                     "a command that keeps the bar open sends the companion nowhere")
         suite.expect(open.isVisible && open.queryMemoryStep == 0
                      && defaults.string(forKey: DefaultsKey.commandBarUsage) == before,
                      "non-learning rows and commands that keep the bar open retain their behavior")
@@ -207,10 +220,41 @@ enum EmojiGridContract {
             suite.expect(CommandBarEmojiTileSize.allCases.allSatisfy { $0.tileSize > $0.glyphSize },
                          "every tile leaves room for its caption beside the glyph")
             let columns = CommandBarEmojiTileSize.allCases.map { size in
-                max(1, Int((560 - 32 + 6) / (size.tileSize + 6)))
+                CommandBarEmojiTileSize.columns(availableWidth: 560, tileSize: size)
             }
             suite.expect(columns == [7, 5, 4],
                          "the panel fits fewer columns as the tiles grow: got \(columns)")
+            let smallWithLegacyScroller = CommandBarEmojiTileSize.columns(
+                availableWidth: 545, tileSize: .small)
+            suite.expect(smallWithLegacyScroller == 6,
+                         "small tiles use the viewport width left by a legacy scroller")
+            let mediumTileHeight = CommandBarEmojiTileSize.medium.glyphSize + 49
+            let height14 = CommandBarEmojiTileSize.contentHeight(
+                itemCount: 14, columns: 5, tileHeight: mediumTileHeight)
+            let height15 = CommandBarEmojiTileSize.contentHeight(
+                itemCount: 15, columns: 5, tileHeight: mediumTileHeight)
+            let height25 = CommandBarEmojiTileSize.contentHeight(
+                itemCount: 25, columns: 5, tileHeight: mediumTileHeight)
+            let height15WithPermissionHint = CommandBarEmojiTileSize.contentHeight(
+                itemCount: 15, columns: 5, tileHeight: mediumTileHeight, headerHeight: 24)
+            suite.expect(height14 == height15 && height15 < height25 && height25 < 452,
+                         "14–25 medium matches size the panel by three to five tile rows")
+            suite.expect(height15WithPermissionHint == height15 + 24,
+                         "the permission notice is included in the grid's measured height")
+            suite.expect(CommandBarEmojiTileSize.contentHeight(
+                             itemCount: 26, columns: 5, tileHeight: mediumTileHeight) > 452,
+                         "a grid taller than the ceiling scrolls instead of growing the panel")
+        }
+
+        suite.run("emoji grid arrow modifiers") {
+            suite.expect(CommandBarEmojiGridNavigation.consumesHorizontalArrow(
+                             gridIsNavigable: true, modifiersPresent: false),
+                         "bare horizontal arrows walk the grid")
+            suite.expect(!CommandBarEmojiGridNavigation.consumesHorizontalArrow(
+                             gridIsNavigable: true, modifiersPresent: true)
+                         && !CommandBarEmojiGridNavigation.consumesHorizontalArrow(
+                             gridIsNavigable: false, modifiersPresent: false),
+                         "modified arrows and non-grid arrows keep their existing owners")
         }
 
         suite.run("emoji grid walk") {

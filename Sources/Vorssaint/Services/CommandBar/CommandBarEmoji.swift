@@ -236,6 +236,32 @@ enum CommandBarEmojiTileSize: String, CaseIterable, Identifiable {
         CommandBarEmojiTileSize(rawValue: raw ?? "") ?? .medium
     }
 
+    /// Columns the viewport can hold after the grid's side insets. The width
+    /// is the scroll view's offered width, including any legacy scroller inset.
+    static func columns(availableWidth: CGFloat,
+                        tileSize: CommandBarEmojiTileSize,
+                        horizontalPadding: CGFloat = 32,
+                        spacing: CGFloat = 6) -> Int {
+        let contentWidth = max(0, availableWidth - horizontalPadding)
+        return max(1, Int((contentWidth + spacing) / (tileSize.tileSize + spacing)))
+    }
+
+    /// Ideal grid height, including inter-row spacing and its vertical inset.
+    /// The view caps this at the list ceiling and lets the rest scroll.
+    static func contentHeight(itemCount: Int,
+                              columns: Int,
+                              tileHeight: CGFloat,
+                              rowSpacing: CGFloat = 8,
+                              verticalPadding: CGFloat = 16,
+                              headerHeight: CGFloat = 0) -> CGFloat {
+        guard itemCount > 0, columns > 0 else { return 0 }
+        let rows = (itemCount + columns - 1) / columns
+        return CGFloat(rows) * tileHeight
+            + CGFloat(max(0, rows - 1)) * rowSpacing
+            + verticalPadding
+            + headerHeight
+    }
+
     /// Where one grid step lands, pure so the tests can pin it. Rows sit in
     /// reading order; `columns` is what the view reports. A walk off the top
     /// or the bottom stops at the edge, and a vertical move into a last row
@@ -263,5 +289,13 @@ enum CommandBarEmojiTileSize: String, CaseIterable, Identifiable {
         // Both axes at once never happens from a keyboard: one press, one
         // axis. The clamped arithmetic keeps even that honest.
         return max(0, min(count - 1, at + dx + dy * columns))
+    }
+}
+
+/// A modified horizontal arrow belongs to the field/category chips, not the
+/// grid; only an unmodified arrow walks a tile.
+enum CommandBarEmojiGridNavigation {
+    static func consumesHorizontalArrow(gridIsNavigable: Bool, modifiersPresent: Bool) -> Bool {
+        gridIsNavigable && !modifiersPresent
     }
 }
