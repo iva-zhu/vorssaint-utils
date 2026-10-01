@@ -207,10 +207,41 @@ enum EmojiGridContract {
             suite.expect(CommandBarEmojiTileSize.allCases.allSatisfy { $0.tileSize > $0.glyphSize },
                          "every tile leaves room for its caption beside the glyph")
             let columns = CommandBarEmojiTileSize.allCases.map { size in
-                max(1, Int((560 - 32 + 6) / (size.tileSize + 6)))
+                CommandBarEmojiTileSize.columns(availableWidth: 560, tileSize: size)
             }
             suite.expect(columns == [7, 5, 4],
                          "the panel fits fewer columns as the tiles grow: got \(columns)")
+            let smallWithLegacyScroller = CommandBarEmojiTileSize.columns(
+                availableWidth: 545, tileSize: .small)
+            suite.expect(smallWithLegacyScroller == 6,
+                         "small tiles use the viewport width left by a legacy scroller")
+            let mediumTileHeight = CommandBarEmojiTileSize.medium.glyphSize + 49
+            let height14 = CommandBarEmojiTileSize.contentHeight(
+                itemCount: 14, columns: 5, tileHeight: mediumTileHeight)
+            let height15 = CommandBarEmojiTileSize.contentHeight(
+                itemCount: 15, columns: 5, tileHeight: mediumTileHeight)
+            let height25 = CommandBarEmojiTileSize.contentHeight(
+                itemCount: 25, columns: 5, tileHeight: mediumTileHeight)
+            let height15WithPermissionHint = CommandBarEmojiTileSize.contentHeight(
+                itemCount: 15, columns: 5, tileHeight: mediumTileHeight, headerHeight: 24)
+            suite.expect(height14 == height15 && height15 < height25 && height25 < 452,
+                         "14–25 medium matches size the panel by three to five tile rows")
+            suite.expect(height15WithPermissionHint == height15 + 24,
+                         "the permission notice is included in the grid's measured height")
+            suite.expect(CommandBarEmojiTileSize.contentHeight(
+                             itemCount: 26, columns: 5, tileHeight: mediumTileHeight) > 452,
+                         "a grid taller than the ceiling scrolls instead of growing the panel")
+        }
+
+        suite.run("emoji grid arrow modifiers") {
+            suite.expect(CommandBarEmojiGridNavigation.consumesHorizontalArrow(
+                             gridIsNavigable: true, modifiersPresent: false),
+                         "bare horizontal arrows walk the grid")
+            suite.expect(!CommandBarEmojiGridNavigation.consumesHorizontalArrow(
+                             gridIsNavigable: true, modifiersPresent: true)
+                         && !CommandBarEmojiGridNavigation.consumesHorizontalArrow(
+                             gridIsNavigable: false, modifiersPresent: false),
+                         "modified arrows and non-grid arrows keep their existing owners")
         }
 
         suite.run("emoji grid walk") {

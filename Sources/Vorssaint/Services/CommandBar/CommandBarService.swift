@@ -956,7 +956,7 @@ final class CommandBarService: ObservableObject {
     /// that found the door is left at the threshold, so the grid opens as the
     /// full browse instead of a search-results list.
     func openEmojiGrid() {
-        show()
+        if !isVisible { show() }
         query = ""
         setCategory(.emoji)
     }
@@ -1970,9 +1970,6 @@ final class CommandBarService: ObservableObject {
         activeCategory == .emoji
     }
 
-    /// A typed query whose whole result set the emoji catalog produced: the
-    /// grid serves it the same way, so a search of emoji looks like the
-    /// browsing of them.
     /// A typed query whose whole result set the emoji catalog produced: the
     /// grid serves it the same way, so a search of emoji looks like the
     /// browsing of them. The browser row itself is not catalog produce — its
@@ -3498,10 +3495,8 @@ final class CommandBarService: ObservableObject {
                 self.runSelected()
                 return nil
             case kVK_UpArrow:
-                // A modified arrow keeps its field meaning — Shift selects,
-                // Option walks by paragraph, Command jumps to the ends — so
-                // only a bare key walks the rows or the grid.
-                guard navigationModifiers.isEmpty else { return event }
+                // Keep the existing selection behavior even while a shortcut
+                // modifier is still held.
                 if case .actions = self.mode { self.moveActionSelection(-1) }
                 else if self.isEmojiGridNavigable {
                     self.moveSelectionInGrid(0, -1, columns: self.emojiGridColumns)
@@ -3509,7 +3504,6 @@ final class CommandBarService: ObservableObject {
                 else { self.moveSelection(-1) }
                 return nil
             case kVK_DownArrow:
-                guard navigationModifiers.isEmpty else { return event }
                 if case .actions = self.mode {
                     self.moveActionSelection(1)
                 } else if self.isEmojiGridNavigable {
@@ -3519,21 +3513,21 @@ final class CommandBarService: ObservableObject {
                 }
                 return nil
             case kVK_LeftArrow:
-                // The grid is two-dimensional, so the bare Left and Right walk
-                // its tiles wherever it stands: the browsed category and the
-                // search that found only emoji alike. Fine-tuning a found tile
-                // is what the arrows are for here; a modified key goes back to
-                // the caret, which owns the word walks and the selection.
-                guard navigationModifiers.isEmpty else { return event }
-                if self.isEmojiGridNavigable {
+                // Bare Left and Right walk tiles. Modified arrows keep their
+                // field meaning when text is present; with an empty field they
+                // still walk the category chips as they do on main.
+                if CommandBarEmojiGridNavigation.consumesHorizontalArrow(
+                    gridIsNavigable: self.isEmojiGridNavigable,
+                    modifiersPresent: !navigationModifiers.isEmpty) {
                     self.moveSelectionInGrid(-1, 0, columns: self.emojiGridColumns)
                     return nil
                 }
                 // Handed back untouched when there is no grid to walk.
                 return self.moveCategory(-1) ? nil : event
             case kVK_RightArrow:
-                guard navigationModifiers.isEmpty else { return event }
-                if self.isEmojiGridNavigable {
+                if CommandBarEmojiGridNavigation.consumesHorizontalArrow(
+                    gridIsNavigable: self.isEmojiGridNavigable,
+                    modifiersPresent: !navigationModifiers.isEmpty) {
                     self.moveSelectionInGrid(1, 0, columns: self.emojiGridColumns)
                     return nil
                 }

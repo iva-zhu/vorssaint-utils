@@ -29,6 +29,7 @@ struct CommandBarView: View {
     /// As tall as the list is ever allowed to be, so the panel never grows
     /// past what a laptop screen can show above the fold.
     static let listCeiling: CGFloat = 452
+    private static let panelBaseWidth: CGFloat = 560
     private static let homeChipID = "category.all"
 
     @ObservedObject private var service = CommandBarService.shared
@@ -172,7 +173,7 @@ struct CommandBarView: View {
                 footer
             }
         }
-        .frame(width: 560)
+        .frame(width: Self.panelBaseWidth)
         .background(HUDBackdrop(cornerRadius: 22, contrast: .high))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .onAppear { focusSearch() }
@@ -431,7 +432,31 @@ struct CommandBarView: View {
     }
 
     private var resultsList: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let isEmojiGrid = service.isEmojiGridOpen || service.isEmojiResultSet
+        let hasPermissionHint = isEmojiGrid && service.rows.contains { needsPermission(for: $0) }
+        let tile = CommandBarEmojiTileSize.resolved(raw: emojiTileSizeRaw)
+        let gridHeaderHeight: CGFloat = hasPermissionHint ? 24 : 0
+        // Glyph box + caption + stack spacing + the tile's vertical inset.
+        let tileHeight = tile.glyphSize + 8 + 26 + 3 + 12
+        let fullWidthColumns = CommandBarEmojiTileSize.columns(
+            availableWidth: Self.panelBaseWidth, tileSize: tile)
+        let fullWidthGridHeight = CommandBarEmojiTileSize.contentHeight(
+            itemCount: service.rows.count, columns: fullWidthColumns, tileHeight: tileHeight,
+            headerHeight: gridHeaderHeight)
+        // A legacy scroller reserves space in the viewport. Count columns from
+        // the width it leaves, but only when the grid actually needs scrolling.
+        let hasLegacyScroller = NSScroller.preferredScrollerStyle == .legacy
+            && fullWidthGridHeight > Self.listCeiling
+        let scrollerWidth = hasLegacyScroller
+            ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
+        let gridAvailableWidth = Self.panelBaseWidth - scrollerWidth
+        let gridColumns = CommandBarEmojiTileSize.columns(
+            availableWidth: gridAvailableWidth, tileSize: tile)
+        let gridHeight = CommandBarEmojiTileSize.contentHeight(
+            itemCount: service.rows.count, columns: gridColumns, tileHeight: tileHeight,
+            headerHeight: gridHeaderHeight)
+
+        return VStack(alignment: .leading, spacing: 0) {
             if service.isShowingSuggestions, service.activeCategory == nil {
                 // A list of commands never says the bar can add up, convert or
                 // reach into another app's menus. Examples do, and clicking
@@ -460,22 +485,40 @@ struct CommandBarView: View {
                 .padding(.top, 10)
             }
             ScrollViewReader { proxy in
-                // The bar shows more than fits when nothing is typed, and a
-                // list with no scrollbar looks like a list that ends there.
-                ScrollView(showsIndicators: service.rows.count > 14) {
-                    if service.isEmojiGridOpen || service.isEmojiResultSet {
-                        emojiGrid
+                let scroll = ScrollView(showsIndicators: isEmojiGrid
+                                        ? gridHeight > Self.listCeiling
+                                        : service.rows.count > 14) {
+                    if isEmojiGrid {
+                        VStack(spacing: 0) {
+                            if hasPermissionHint {
+                                Label(text.needsPermissionHint,
+                                      systemImage: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.orange)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 16)
+                                    .frame(height: gridHeaderHeight)
+                            }
+                            emojiGrid(tile: tile, columns: gridColumns)
+                        }
                     } else {
                         rowsList
                     }
                 }
-                // A short list makes the panel exactly as tall as it needs to
-                // be. A long one is pinned to its ceiling instead: asking the
-                // layout for the ideal height of a hundred rows would measure
-                // every one of them and throw the laziness away.
-                .frame(maxHeight: Self.listCeiling)
-                .fixedSize(horizontal: false, vertical: service.rows.count <= 14)
-                .frame(minHeight: service.rows.count > 14 ? Self.listCeiling : nil)
+                Group {
+                    if isEmojiGrid {
+                        scroll.frame(height: min(gridHeight, Self.listCeiling))
+                    } else {
+                        // Preserve the row list's existing ideal-height and
+                        // lazy-loading behavior.
+                        scroll
+                            .frame(maxHeight: Self.listCeiling)
+                            .fixedSize(horizontal: false, vertical: service.rows.count <= 14)
+                            .frame(minHeight: service.rows.count > 14 ? Self.listCeiling : nil)
+                    }
+                }
                 .onChange(of: service.selectedIndex) { _, index in
                     guard service.rows.indices.contains(index) else { return }
                     proxy.scrollTo(service.rows[index].id)
@@ -490,12 +533,10 @@ struct CommandBarView: View {
     /// narrowed by what is typed, and for a search whose whole result set the
     /// emoji catalog produced. A mixed result set falls back to the rows,
     /// where the matched letters can be shown.
-    private var emojiGrid: some View {
-        let tile = CommandBarEmojiTileSize.resolved(raw: emojiTileSizeRaw)
-        let columns = max(1, Int((560 - 32 + 6) / (tile.tileSize + 6)))
-        return LazyVGrid(columns: Array(repeating: GridItem(.fixed(tile.tileSize), spacing: 6),
-                                        count: columns),
-                         spacing: 8) {
+    private func emojiGrid(tile: CommandBarEmojiTileSize, columns: Int) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(tile.tileSize), spacing: 6),
+                                 count: columns),
+                  spacing: 8) {
             ForEach(Array(service.rows.enumerated()), id: \.element.id) { index, entry in
                 emojiTile(entry, index: index, tile: tile)
                     .id(entry.id)
@@ -514,6 +555,11 @@ struct CommandBarView: View {
         .onDisappear { service.emojiGridColumns = 0 }
     }
 
+    private func needsPermission(for entry: CommandBarEntry) -> Bool {
+        if case .needsPermission = entry.trouble { return true }
+        return false
+    }
+
     /// One tile of the emoji grid. The glyph reads from the title's head, the
     /// caption from the name the row answers to — the title is written
     /// "😀  grinning face", so the glyph is the first token by contract of the
@@ -527,6 +573,7 @@ struct CommandBarView: View {
         let name = entry.matchTitle ?? (parts.count > 1
             ? parts.dropFirst().joined(separator: " ")
             : parts.first.map(String.init) ?? "")
+        let needsPermission = needsPermission(for: entry)
         let isSelected = index == service.selectedIndex
         return Button {
             service.run(entry, fromClick: true)
@@ -541,10 +588,10 @@ struct CommandBarView: View {
                 // grid reads as one plate instead of a ragged rug.
                 Text(name)
                     .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .truncationMode(.tail)
                     .multilineTextAlignment(.center)
+                    .foregroundStyle(needsPermission ? Color.orange : Color.secondary)
                     .frame(height: 26, alignment: .top)
             }
             .frame(width: tile.tileSize)
@@ -560,12 +607,12 @@ struct CommandBarView: View {
             )
         }
         .buttonStyle(.plain)
-        .help(entry.title)
+        .help(needsPermission ? "\(entry.title), \(text.needsPermissionHint)" : entry.title)
         .onHover { hovering in
             if hovering { service.selectFromHover(index) }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(entry.title)
+        .accessibilityLabel(accessibilityLabel(entry))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
