@@ -2495,18 +2495,15 @@ final class CommandBarService: ObservableObject {
         // never reaches the local monitor. It quits Vorssaint instead of
         // landing on the card (issue #1193). When Accessibility cannot
         // create the tap, the monitor below still records as before.
-        // The result decides who owns the offer's keys: with the tap the
-        // drain lives there; without it the panel's monitors do, through
-        // `fallbackRouter`.
+        // With the tap, the held-key drain lives there; without it, the
+        // panel's monitors own the drain through `fallbackRouter`.
         recordingTapAvailable = ShortcutRecordingTap.begin { [weak self] keyCode, modifiers, _ in
             self?.handleCaptureKey(keyCode: keyCode, modifiers: modifiers)
         }
-        // With the tap the drain lives there; without it the panel's
-        // monitors do, through `fallbackRouter` — and then the debts stay:
-        // a forwarded key may still be held (the offer accepted with
-        // Return, the next capture opened before its release), and its
-        // release must follow the press. A tap switch is the only reset:
-        // monitor-side debts are dead the moment the tap owns the drain.
+        // With the tap the held-key drain lives there; without it the panel's
+        // monitors keep the captured key's repeats and release paired. A tap
+        // switch is the only reset: monitor-side debts are dead the moment the
+        // tap owns the drain.
         if recordingTapAvailable { fallbackRouter.reset() }
         mode = .capturingShortcut(entryID: entry.id)
         aliasWarning = nil
@@ -2560,8 +2557,8 @@ final class CommandBarService: ObservableObject {
     /// Set when the name being typed already belongs to another row.
     @Published private(set) var aliasWarning: String?
     /// Whether the recording tap could exist. When it could not (no
-    /// Accessibility), the panel's monitors own the offer's keys and the
-    /// debts a forwarded keyDown hands out, through `fallbackRouter`.
+    /// Accessibility), the panel's monitors own the captured key's held-key
+    /// drain through `fallbackRouter`.
     private var recordingTapAvailable = true
     private var fallbackRouter = CommandBarRowShortcuts.FallbackKeyRouter()
 
@@ -3417,29 +3414,19 @@ final class CommandBarService: ObservableObject {
             // speaks, so composition always wins.
             if self.fieldIsComposing(in: panel) { return event }
 
-            // Without the recording tap the monitors own the drain: a
-            // forwarded key's repeats stay suppressed once its capture
-            // closes and its release passes to the app; a swallowed key
-            // keeps its repeats and release with the recording; a fresh
-            // press is never swallowed for a debt whose release the monitor
-            // never saw. (The tap-based drain does the same inside the tap;
-            // this is its monitor-side twin.)
+            // Without the recording tap the monitors keep a captured key's
+            // repeats and release with the recording after it ends. A fresh
+            // press is never swallowed for a release the monitor did not see.
+            // The tap-based drain does the same inside the tap.
             if !self.recordingTapAvailable {
                 var capturing = false
                 if case .capturingShortcut = self.mode { capturing = true }
                 switch self.fallbackRouter.routeDown(
                     keyCode: Int64(event.keyCode),
-                    modifiers: GlobalShortcutModifiers(eventFlags: event.modifierFlags),
-                    offerID: nil,
                     captureIsActive: capturing,
                     isRepeat: event.isARepeat) {
                 case .swallow:
                     return nil
-                case .pass:
-                    // An offered key goes on to the buttons the focus walk
-                    // reaches. (Escape never gets here: the router hands it
-                    // to the capture as a swallowed pair.)
-                    return event
                 case .record:
                     break
                 }
@@ -3551,12 +3538,13 @@ final class CommandBarService: ObservableObject {
                 }
                 return nil
             case kVK_LeftArrow:
-                // Bare Left and Right walk tiles. Modified arrows keep their
-                // field meaning when text is present; with an empty field they
-                // still walk the category chips as they do on main.
+                // Bare arrows walk tiles. Modified arrows keep their field
+                // meaning when text is present; with an empty field they also
+                // walk the grid, including while its shortcut modifiers remain held.
                 if CommandBarEmojiGridNavigation.consumesHorizontalArrow(
                     gridIsNavigable: self.isEmojiGridNavigable,
-                    modifiersPresent: !navigationModifiers.isEmpty) {
+                    modifiersPresent: !navigationModifiers.isEmpty,
+                    queryIsEmpty: self.query.isEmpty) {
                     self.moveSelectionInGrid(-1, 0, columns: self.emojiGridColumns)
                     return nil
                 }
@@ -3565,7 +3553,8 @@ final class CommandBarService: ObservableObject {
             case kVK_RightArrow:
                 if CommandBarEmojiGridNavigation.consumesHorizontalArrow(
                     gridIsNavigable: self.isEmojiGridNavigable,
-                    modifiersPresent: !navigationModifiers.isEmpty) {
+                    modifiersPresent: !navigationModifiers.isEmpty,
+                    queryIsEmpty: self.query.isEmpty) {
                     self.moveSelectionInGrid(1, 0, columns: self.emojiGridColumns)
                     return nil
                 }
@@ -3616,14 +3605,13 @@ final class CommandBarService: ObservableObject {
                 return event
             }
         }
-        // The fallback drain's debts live in these monitors: a forwarded
-        // key's release passes to the app, a swallowed one ends its hold.
-        // With the tap the drain is the tap's own; the monitors then only
-        // watch, and this stays a no-op.
+        // The fallback drain's debts live in these monitors: a captured
+        // key's release ends its hold. With the tap the drain is the tap's
+        // own; the monitors then only watch, and this stays a no-op.
         keyUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyUp) { [weak self, weak panel] event in
             guard let self, let panel, event.window === panel else { return event }
             if !self.recordingTapAvailable,
-               case .swallow = self.fallbackRouter.routeUp(Int64(event.keyCode)) {
+               self.fallbackRouter.swallowsUp(Int64(event.keyCode)) {
                 return nil
             }
             return event

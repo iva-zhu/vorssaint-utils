@@ -463,7 +463,7 @@ def main():
 
     # The recording tap's drain, verbatim, against a stub state: no tap, no
     # keyboard and no run loop. Only the environment the bodies touch changes;
-    # the drain logic itself — routing, generation guards, settling — is read
+    # the drain logic itself — held-key routing, generation guards, settling — is read
     # from production on every build.
     tap = "Sources/Vorssaint/Services/ShortcutRecordingTap.swift"
     write("ShortcutRecordingTap.swift", "import ApplicationServices\nimport Carbon.HIToolbox\n"
@@ -477,8 +477,6 @@ def main():
           + "final class Host {\n"
           + "    var tapIsAlive = true\n"
           + "    var sessionIsActive = true\n"
-          + "    var isPaused = false\n"
-          + "    var pausedOfferID: UUID?\n"
           + "    var heldKeyCode: Int64?\n"
           + "    var drainingKeyCode: Int64?\n"
           + "    var drainGeneration = 0\n"
@@ -486,7 +484,6 @@ def main():
           + "    var tap: CFMachPort?\n"
           + "    var runLoopSource: CFRunLoopSource?\n"
           + "    var handler: ((Int64, GlobalShortcutModifiers, CGEventFlags) -> Void)?\n"
-          + "    var pausedKeyRouter = CommandBarRowShortcuts.PausedKeyRouter()\n"
           + "    var superState = SuperKeySupport.State()\n"
           + "    var watchdogArms = 0\n"
           + "    var tearDownCalls = 0\n"

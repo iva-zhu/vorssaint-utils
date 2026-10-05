@@ -292,10 +292,13 @@ enum CommandBarEmojiTileSize: String, CaseIterable, Identifiable {
     }
 }
 
-/// A modified horizontal arrow belongs to the field/category chips, not the
-/// grid; only an unmodified arrow walks a tile.
+/// A modified horizontal arrow belongs to the field when it has text. With an
+/// empty field it still walks the grid, including while the grid's hotkey
+/// modifiers are being released.
 enum CommandBarEmojiGridNavigation {
-    static func consumesHorizontalArrow(gridIsNavigable: Bool, modifiersPresent: Bool) -> Bool {
-        gridIsNavigable && !modifiersPresent
+    static func consumesHorizontalArrow(gridIsNavigable: Bool,
+                                       modifiersPresent: Bool,
+                                       queryIsEmpty: Bool) -> Bool {
+        gridIsNavigable && (!modifiersPresent || queryIsEmpty)
     }
 }
