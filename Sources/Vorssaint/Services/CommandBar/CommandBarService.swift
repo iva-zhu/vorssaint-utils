@@ -111,6 +111,9 @@ final class CommandBarService: ObservableObject {
     /// app got to the combination first. Shown in Settings so the key is not
     /// a mystery.
     @Published private(set) var emojiShortcutRegistrationFailed = false
+    /// Set when a sync switched the emoji key off because macOS answers its
+    /// combination and the take-over was never agreed. Settings says why.
+    @Published private(set) var emojiShortcutSwitchedOff = false
     /// Rows whose own combination the system refused, because another app got
     /// there first. Shown in Settings so the key is not a mystery.
     @Published private(set) var refusedRowShortcutKeys: Set<String> = []
@@ -376,11 +379,13 @@ final class CommandBarService: ObservableObject {
                                             fallback: .commandBarEmojiDefault)
         var enabled = available
             && UserDefaults.standard.bool(forKey: DefaultsKey.commandBarEmojiShortcutEnabled)
+        emojiShortcutSwitchedOff = false
         if enabled, !SystemShortcutTakeoverSupport.emojiShortcutMayArm(
             conflictsWithMacOS: SystemShortcutTakeover.conflictsWithMacOS(
                 shortcut, for: .commandBarEmoji),
             takenOver: SystemShortcutTakeover.isTakenOver(DefaultsKey.commandBarEmojiShortcut)) {
             enabled = false
+            emojiShortcutSwitchedOff = true
             UserDefaults.standard.set(false, forKey: DefaultsKey.commandBarEmojiShortcutEnabled)
         }
         // Synced on both turns of the toggle: the unregister on the way off is
@@ -533,9 +538,20 @@ final class CommandBarService: ObservableObject {
             focusField(in: panel)
             // Still unseen: what is typed while the drop falls lands in the field.
             CommandBarDroplet.shared.drop(from: island, into: panel.frame, look: NotchMascotSupport.look()) {
-                [weak self, weak panel] in
+                [weak self, weak panel] fade in
                 guard let self, let panel, self.presentation == .droplet, panel.isVisible else { return }
+                // Landed, the bar takes the drop's place as is. Typed into
+                // before that, it shows at once over the drop and fades in
+                // through Core Animation, which a busy main thread cannot hold
+                // back the way it holds a window's own alpha steps.
                 panel.alphaValue = 1
+                guard fade > 0, let layer = panel.contentView?.layer else { return }
+                let appear = CABasicAnimation(keyPath: "opacity")
+                appear.fromValue = 0
+                appear.toValue = 1
+                appear.duration = fade
+                appear.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                layer.add(appear, forKey: "appear")
             }
             return
         }
@@ -822,7 +838,7 @@ final class CommandBarService: ObservableObject {
         let takeOverKey = CommandBarRowShortcuts.takeOverKey(for: entry.stableKey)
         guard let shortcut else {
             SystemShortcutTakeover.setTakeOver(takeOverKey, false)
-            storeRowShortcut(nil, for: entry)
+            storeRowShortcut(nil, forKey: entry.stableKey)
             return nil
         }
         if let message = rowShortcutIssue(shortcut, for: entry) { return message }
@@ -832,7 +848,7 @@ final class CommandBarService: ObservableObject {
         case .save(let clearTakeOver):
             if clearTakeOver { SystemShortcutTakeover.setTakeOver(takeOverKey, false) }
         }
-        storeRowShortcut(shortcut, for: entry)
+        storeRowShortcut(shortcut, forKey: entry.stableKey)
         return nil
     }
 
@@ -851,7 +867,7 @@ final class CommandBarService: ObservableObject {
         guard AppFeature.commandBar.isAvailable else { return nil }
         if let message = rowShortcutIssue(shortcut, for: entry) { return message }
         SystemShortcutTakeover.setTakeOver(CommandBarRowShortcuts.takeOverKey(for: entry.stableKey), true)
-        storeRowShortcut(shortcut, for: entry)
+        storeRowShortcut(shortcut, forKey: entry.stableKey)
         return nil
     }
 
@@ -863,10 +879,18 @@ final class CommandBarService: ObservableObject {
             isTakenOver: SystemShortcutTakeover.isTakenOver)
     }
 
+    /// An app the uninstaller removed takes its combination with it, so the
+    /// keys are free for another app instead of held by a row that is gone.
+    func forgetRowShortcut(forKey key: String) {
+        guard AppFeature.commandBar.isAvailable, rowShortcuts[key] != nil else { return }
+        SystemShortcutTakeover.setTakeOver(CommandBarRowShortcuts.takeOverKey(for: key), false)
+        storeRowShortcut(nil, forKey: key)
+    }
+
     /// The one write path for a row binding: the ordinary save, the offer's
     /// acceptance and the removal all land here.
-    private func storeRowShortcut(_ shortcut: GlobalShortcut?, for entry: CommandBarEntry) {
-        let next = CommandBarRowShortcuts.setting(shortcut, for: entry.stableKey, in: rowShortcuts)
+    private func storeRowShortcut(_ shortcut: GlobalShortcut?, forKey key: String) {
+        let next = CommandBarRowShortcuts.setting(shortcut, for: key, in: rowShortcuts)
         UserDefaults.standard.set(CommandBarRowShortcuts.encode(next),
                                   forKey: DefaultsKey.commandBarRowShortcuts)
         syncRowHotkeys()
@@ -955,6 +979,22 @@ final class CommandBarService: ObservableObject {
         // shortcut, it is an accident with a name.
         guard !entry.needsPrompt, !entry.keepsBarOpen else {
             show(promptingFor: key)
+            return
+        }
+        // An app already in front hides on its own combination, so one key
+        // brings it forward and puts it away. With the bar open, the key
+        // opens the app instead: the panel never takes focus, so the app
+        // underneath is still active. A hide the app refuses falls through to
+        // opening it, as before. Launcher-style apps can misreport isActive,
+        // so the workspace's frontmost app is the tiebreaker, as for the Dock.
+        if !isVisible, let app = installedApp(for: entry), let running = runningApplication(for: app),
+           CommandBarRowShortcuts.hidesAppInFront(
+               isFrontmost: running.isActive
+                   || NSWorkspace.shared.frontmostApplication?.processIdentifier == running.processIdentifier,
+               isHidden: running.isHidden,
+               ownsFrontWindow: WindowServerSupport.frontWindowOwner(
+                   in: WindowServerSupport.onScreenWindowInfo()) == running.processIdentifier),
+           running.hide() {
             return
         }
         if isVisible { hide() }
@@ -1070,10 +1110,19 @@ final class CommandBarService: ObservableObject {
         case .emoji:
             let hidden = hiddenCache
             return emojiEntries.contains { !hidden.contains($0.stableKey) }
-        case .actions, .settingsPages, .snippets, .folders, .links:
+        case .actions:
+            // The same rule the content path applies: a chip that answered
+            // with a narrower filter than the list behind it would hide a
+            // category the list still has rows for.
+            let hidden = hiddenCache
+            return catalog.contains {
+                CommandBarPreferences.isActionRow($0.id, disabled: disabledCache)
+                    && !hidden.contains($0.stableKey)
+            }
+        case .settingsPages, .snippets, .folders, .links:
             // Asked once per chip on every pass with an empty field, so it
-            // stops at the first row that qualifies instead of building a copy
-            // of the catalog five times over.
+            // stops at the first row that qualifies instead of copying the
+            // catalog once per source.
             let hidden = hiddenCache
             return catalog.contains {
                 CommandBarPreferences.source(ofRowID: $0.id) == source
@@ -1095,7 +1144,9 @@ final class CommandBarService: ObservableObject {
         let rows: [CommandBarEntry]
         switch source {
         case .actions:
-            rows = catalog.filter { CommandBarPreferences.source(ofRowID: $0.id) == .actions }
+            rows = catalog.filter {
+                CommandBarPreferences.isActionRow($0.id, disabled: disabledCache)
+            }
         case .apps: rows = appEntries
         case .macSettings: rows = macSettingsEntries
         case .windows: rows = windowEntries
@@ -1263,10 +1314,14 @@ final class CommandBarService: ObservableObject {
         objectWillChange.send()
     }
 
+    /// Settings reads titles through here while SwiftUI draws the page, and a
+    /// publish from inside a view update is undefined behavior. So this fills
+    /// the lookup maps without assigning `appEntries`. The rows the last scan
+    /// built already name the same apps, and the next opening rebuilds them.
     private func ensureCatalogIndexed() {
         if entriesByStableKey.isEmpty {
             rebuildCatalog()
-            rebuildRunningEntries()
+            rebuildRunningEntries(apps: false)
         }
     }
 
@@ -1423,16 +1478,18 @@ final class CommandBarService: ObservableObject {
 
     /// The rows that depend on what is running right now. Cheap enough to
     /// redo on every open, which is the only way the live dot tells the truth.
-    private func rebuildRunningEntries(index: Bool = true) {
+    private func rebuildRunningEntries(index: Bool = true, apps: Bool = true) {
         let bar = FeatureStrings.commandBar(L10n.shared.language)
         let running = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
         quitEntries = CommandBarCatalog.quitEntries(running, bar: bar)
-        let bundleIDs = Set(running.compactMap(\.bundleIdentifier))
-        let paths = Set(running.compactMap { $0.bundleURL?.standardizedFileURL.path })
-        appEntries = CommandBarCatalog.appEntries(cachedApps,
-                                                  runningBundleIDs: bundleIDs,
-                                                  runningPaths: paths,
-                                                  bar: bar)
+        if apps {
+            let bundleIDs = Set(running.compactMap(\.bundleIdentifier))
+            let paths = Set(running.compactMap { $0.bundleURL?.standardizedFileURL.path })
+            appEntries = CommandBarCatalog.appEntries(cachedApps,
+                                                      runningBundleIDs: bundleIDs,
+                                                      runningPaths: paths,
+                                                      bar: bar)
+        }
         uninstallEntries = CommandBarCatalog.uninstallEntries(cachedApps,
                                                               uninstallable: uninstallableAppIDs,
                                                               bar: bar)
@@ -2972,7 +3029,10 @@ final class CommandBarService: ObservableObject {
         return true
     }
 
-    private static func spotlightApplicationPaths() -> [String] {
+    /// Apps Spotlight finds in the home folder, which the bar lists beside the
+    /// application folders. The uninstaller asks for the same paths, so a copy
+    /// the bar still lists keeps its shortcut.
+    static func spotlightApplicationPaths() -> [String] {
         let result = Shell.run(
             "/usr/bin/mdfind",
             ["-onlyin", NSHomeDirectory(),
@@ -3406,6 +3466,9 @@ final class CommandBarService: ObservableObject {
         removeMonitors()
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak panel] event in
             guard let self, let panel, event.window === panel else { return event }
+            // A key while the drop still falls shows the bar at once, before
+            // the field and its search take the key. Escape closes it instead.
+            if self.presentation == .droplet, event.keyCode != 53 { CommandBarDroplet.shared.hurry() }
 
             // While a language is composing a character (Japanese, Korean,
             // Chinese, and dead keys for accents) Return confirms the

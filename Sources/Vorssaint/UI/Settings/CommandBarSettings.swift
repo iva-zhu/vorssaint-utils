@@ -168,6 +168,11 @@ struct CommandBarSettings: View {
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
+                    if service.emojiShortcutSwitchedOff {
+                        Text(String(format: l10n.s.shortcutConflictFormat, "macOS"))
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                     Text(text.emojiShortcutCaption)
                         .font(.caption)
                         .foregroundStyle(.secondary)
