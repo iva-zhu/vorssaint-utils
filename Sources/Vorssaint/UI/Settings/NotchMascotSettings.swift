@@ -17,7 +17,7 @@ struct NotchMascotSettings: View {
     @AppStorage(DefaultsKey.notchMascotEnabled) private var enabled = false
     @AppStorage(DefaultsKey.notchMascotVisits) private var visits = true
     @AppStorage(DefaultsKey.notchMascotReactions) private var reactions = true
-    @AppStorage(DefaultsKey.notchMascotHidesWhenIdle) private var hidesWhenIdle = false
+    @AppStorage(DefaultsKey.notchMascotHidesWhenIdle) private var hidesWhenIdle = true
     @AppStorage(DefaultsKey.notchMascotStyle) private var style = NotchMascotStyle.minimal.rawValue
     @AppStorage(DefaultsKey.notchMascotShape) private var shape = NotchMascotShape.ball.rawValue
     @AppStorage(DefaultsKey.notchMascotPalette) private var palette = NotchMascotPalette.pearl.rawValue

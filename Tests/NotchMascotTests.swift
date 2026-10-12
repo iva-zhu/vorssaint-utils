@@ -414,8 +414,15 @@ enum NotchMascotTests {
         defaults.set(true, forKey: AppFeature.notchMascot.availabilityKey)
         defaults.set(true, forKey: DefaultsKey.notchEnabled)
         defaults.set(true, forKey: DefaultsKey.notchMascotEnabled)
+        defaults.removeObject(forKey: DefaultsKey.notchMascotHidesWhenIdle)
+        let hidingDefault = [DefaultsKey.notchMascotHidesWhenIdle: Defaults.registeredDefaults[DefaultsKey.notchMascotHidesWhenIdle]!]
+        defaults.register(defaults: hidingDefault)
+        suite.expect(NotchMascotSupport.hidesWhenIdle(in: defaults),
+                     "the companion hides when idle by default")
+        defaults.set(false, forKey: DefaultsKey.notchMascotHidesWhenIdle)
+        defaults.register(defaults: hidingDefault)
         suite.expect(!NotchMascotSupport.hidesWhenIdle(in: defaults),
-                     "the companion stays beside the camera unless it is set to hide when idle")
+                     "a saved choice to stay visible survives registration of the enabled default")
         defaults.set(true, forKey: DefaultsKey.notchMascotHidesWhenIdle)
         suite.expect(NotchMascotSupport.hidesWhenIdle(in: defaults) && NotchMascotSupport.visits(in: defaults)
                      && NotchMascotSupport.reacts(in: defaults),

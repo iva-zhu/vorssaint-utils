@@ -99,7 +99,8 @@ enum MixerLevelCompensationContract {
         HAL.removalStatus = initial
         var watch: LevelCompensationWatch? = LevelCompensationWatch.started(everyProcessExcept: [99]) { _ in }
         watch?.queue.run()
-        weak var weakWatch = watch
+        weak var weakWatch: LevelCompensationWatch?
+        weakWatch = watch
         let client = HAL.registrations.first { $0.object == process }?.client
 
         // An unreadable process list also appears empty; it does not prove

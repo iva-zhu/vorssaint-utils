@@ -249,6 +249,11 @@ final class NotchService: ObservableObject {
     /// When the output last moved its own level, so the rest of that ramp
     /// stays quiet with it.
     private var lastVolumeRide: TimeInterval = -.infinity
+    /// The source the layout notice last read, so a repeated announcement of
+    /// the same source, and the one the system posts at launch, say nothing.
+    private var inputSourceID: String?
+    /// The accepted Command Bar selection awaiting its source-change reading.
+    private var ownInputSourceID: String?
     private var notchNeedsMonitor = false
     private var menuSpaceTimer: Timer?
     private var menuSpaceReading = false
@@ -1032,11 +1037,15 @@ final class NotchService: ObservableObject {
     }
 
     var protectedWindowIDs: Set<CGWindowID> {
-        NotchSupport.showsInCaptures() ? [] : islandWindowIDs
+        islandWindowIDs.subtracting(captureVisibleWindowIDs)
     }
 
     var captureVisibleWindowIDs: Set<CGWindowID> {
-        NotchSupport.showsInCaptures() ? islandWindowIDs : []
+        ScreenshotCapturePolicy.islandCaptureWindowIDs(
+            islandWindowIDs: islandWindowIDs,
+            mainWindowID: panel.flatMap { $0.windowNumber > 0 ? CGWindowID($0.windowNumber) : nil },
+            showsInCaptures: NotchSupport.showsInCaptures(),
+            showsCaptureTool: captureControls != nil || captureID.map(isCaptureVisible(id:)) == true)
     }
 
     /// The island's window and its copies on other displays, as shown.
@@ -1048,10 +1057,9 @@ final class NotchService: ObservableObject {
         })
     }
 
-    /// While a capture is choosing an area on screen, the notch is part of the
-    /// capture interface, so its window is kept out of the pixels no matter
-    /// what the everyday "show in captures" preference says. This lets people
-    /// grab whatever sits behind the notch cleanly.
+    /// Every island window, whatever the "show in captures" preference says.
+    /// Watch keeps them all out while it chooses and reads an area, since
+    /// what it watches must never be the island itself.
     var captureChromeWindowIDs: Set<CGWindowID> {
         running ? islandWindowIDs : []
     }
@@ -3840,6 +3848,17 @@ final class NotchService: ObservableObject {
         if NotchSupport.routes(.volume) {
             bindVolumeEvents()
         }
+        if NotchSupport.routes(.inputSource) {
+            // The layout labels already refresh on every source change and
+            // post when they do, including once at launch; the current source
+            // is read now so that first post announces nothing.
+            ownInputSourceID = nil
+            inputSourceID = InputSourceSelection.currentReading()?.id
+            NotificationCenter.default.publisher(for: GlobalShortcut.keyboardLayoutDidChange)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.inputSourceChanged() }
+                .store(in: &subscriptions)
+        }
         if NotchSupport.routes(.systemNotification) {
             NotchNotificationService.shared.received.sink { [weak self] item in
                 guard let self else { return }
@@ -3967,9 +3986,35 @@ final class NotchService: ObservableObject {
     func showVolume(_ volume: Double, muted: Bool? = nil) -> Bool {
         guard volume.isFinite else { return false }
         let value = muted == true ? 0 : min(1, max(0, volume))
+        let mixer = AppVolumeMixer.shared
+        let output = mixer.outputDevices.first { $0.uid == mixer.currentOutputDeviceUID }
+        let symbol: String
+        if let output, output.isHeadphones {
+            symbol = NotchAccessorySupport.symbol(for: .audio, name: output.name)
+        } else {
+            symbol = value == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill"
+        }
         return show(NotchNotice(event: .volume, title: FeatureStrings.notch(L10n.shared.language).volume,
                                 detail: "\(Int((value * 100).rounded()))%",
-                                symbol: value == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill", level: value))
+                                symbol: symbol, level: value))
+    }
+
+    /// The Command Bar borrows a Latin layout while it is up and gives it
+    /// back on close. Neither switch is news the typist asked for, so each
+    /// one marks itself as the app's own.
+    func noteOwnInputSourceSwitch(to sourceID: String) {
+        ownInputSourceID = sourceID
+    }
+
+    private func inputSourceChanged() {
+        guard let reading = InputSourceSelection.currentReading(), reading.id != inputSourceID else { return }
+        inputSourceID = reading.id
+        let isOwnSwitch = reading.id == ownInputSourceID
+        ownInputSourceID = nil
+        guard !isOwnSwitch else { return }
+        // Like the volume reading, the code takes the value's place and the
+        // source's own name stands where the meter would.
+        show(NotchNotice(event: .inputSource, title: reading.code, detail: reading.name, symbol: "keyboard"))
     }
 
     private func startPower() {

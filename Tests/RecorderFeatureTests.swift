@@ -13,6 +13,7 @@ import VMStatisticsCompat
 
 enum RecorderFeatureTests {
     static func run(_ suite: TestSuite) {
+        RecorderSystemAudioTapLifecycleTests.run(suite)
         func pageVisible(_ page: SettingsPage, available: Set<AppFeature>) -> Bool {
             FeatureVisibilitySupport.isPageVisible(page) { available.contains($0) }
         }
