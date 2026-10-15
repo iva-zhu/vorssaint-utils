@@ -47,6 +47,30 @@ def availability_declaration(path, prefix):
 
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
+    recorder = "Sources/Vorssaint/Services/Recorder/ScreenRecorderService.swift"
+    write("RecorderPreparation.swift", "import Foundation\nextension RecorderPreparationTests {\n"
+          + "final class Service: Fixture {\n"
+          + "".join(declaration(recorder, prefix).replace("private func", "func", 1)
+                    for prefix in ["    private func beginRecording(", "    private func pendingStartIsAuthorized(",
+                                   "    private func invalidatePendingStart()", "    var hasActiveCapture:",
+                                   "    func stopOrCancelActiveCapture()", "    func prepareForSelection()"])
+          + "}\n}\n")
+    write("SwitcherFullscreenScope.swift", "import AppKit\nimport ApplicationServices\nimport CoreGraphics\n"
+          + "extension SwitcherFullscreenScopeTests.Enumerator {\n"
+          + "".join(declaration("Sources/Vorssaint/Services/Switcher/WindowEnumerator.swift", prefix)
+                    .replace("private ", "", 1) for prefix in [
+                        "    struct DisplayScope:", "    struct WindowList {", "    struct AppSnapshot:",
+                        "    struct Snapshot:", "    static func enumerateSwitcherWindows(",
+                        "    static func listWindowsForCommandBar(",
+                        "    private static func listWindows(appRules:",
+                        "    private static func listWindows(filterPID:",
+                        "    private struct AccessibilityWindowSnapshot {",
+                        "    private struct AccessibilityWindowSnapshotList {",
+                        "    private static func appendAccessibilityOnlyWindows(",
+                        "    private static func appendWindowlessApps(",
+                        "    private static func switchableFrame(", "    private static func frameIsSwitchable(",
+                        "    private static func frameLooksFullscreen("])
+          + "}\n")
     write("RecorderSystemAudioTapLifecycle.swift", "import CoreAudio\nimport Foundation\n"
           + "extension RecorderSystemAudioTapLifecycleTests {\nfinal class Tap: Fixture, @unchecked Sendable {\n"
           + declaration("Sources/Vorssaint/Services/Recorder/RecorderSystemAudioTap.swift", "    func stop() async")
@@ -68,6 +92,11 @@ def main():
                         "    private static func accessibilityWindows(for pid: pid_t,",
                         "    private static func appendUnique(", "    private static func contains("])
           + "}\n")
+    write("TransientPasteRuntime.swift", "import AppKit\nimport Carbon.HIToolbox\nimport CoreGraphics\n"
+          + "extension TransientPasteTests {\n"
+          + declaration("Sources/Vorssaint/Services/TransientPaste.swift", "final class TransientPaste {")
+              .replace("NSPasteboard.general", "TransientPasteTests.pasteboard")
+          + "}\n")
     general = "Sources/Vorssaint/UI/Settings/GeneralSettings.swift"
     write("LaunchAtLoginSettings.swift", "import Foundation\n"
           + "extension LaunchAtLoginSettingsTests.View {\n"
@@ -76,6 +105,13 @@ def main():
                                    "    private func setLaunchAtLogin("])
           + "}\n")
     cleaner_view = "Sources/Vorssaint/UI/Cleaner/CleanerView.swift"
+    feature_hub = "Sources/Vorssaint/UI/Settings/FeatureHubSettings.swift"
+    write("FeatureHubLayout.swift", "import SwiftUI\nextension FeatureHubLayoutTests.Page {\n"
+          + "".join(declaration(feature_hub, prefix).replace("    private var", "    var", 1)
+                    for prefix in ["    private var content:", "    private var restartCard:"])
+          + "}\nextension FeatureHubLayoutTests {\n"
+          + declaration("Sources/Vorssaint/UI/Settings/SettingsCard.swift", "struct SettingsCard<")
+          + "}\n")
     write("CleanerLayout.swift", "import SwiftUI\nextension CleanerLayoutTests.Results {\n"
           + "".join(declaration(cleaner_view, prefix).replace("    private ", "    @ViewBuilder\n    ", 1)
                     for prefix in ["    private var resultsState:", "    private var resultsGroups:",
@@ -395,6 +431,17 @@ def main():
           + declaration("Sources/Vorssaint/Services/Clipboard/ClipboardIgnoredApps.swift",
                         "    func sourceSinceLastCheck(")
           + "}\n")
+    disk_image = "Sources/Vorssaint/Services/DiskImageInstaller/DiskImageInstallerService.swift"
+    write("DiskImageHomebrew.swift", "import Foundation\nimport Darwin\nextension DiskImageHomebrewTests {\n"
+          + "".join(declaration(disk_image, prefix).replace("private struct", "struct", 1)
+                    for prefix in ["    private struct FileIdentity:", "    private struct Candidate {",
+                                   "    private struct CommandResult {"])
+          + "final class Service: Fixture {\n"
+          + "".join(declaration(disk_image, prefix).replace("private ", "", 1)
+                    for prefix in ["    private func inspect(", "    private func candidate(",
+                                   "    private static func isHomebrewImage(",
+                                   "    private static func fileIdentity(", "    private static func validBundle("])
+          + "}\n}\n")
     cleaner = "Sources/Vorssaint/Services/URLCleanerService.swift"
     write("URLCleanerRewrite.swift", "import AppKit\n"
           + "extension ClipboardFeatureTests.URLCleanerHost {\n"
@@ -406,6 +453,12 @@ def main():
           + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
                         "    private static func copyAnswer(").replace("private static", "static", 1)
           + "}\n")
+    write("CommandBarSelection.swift", "import Foundation\nextension CommandBarSelectionTests {\n"
+          + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarSupport.swift", "enum CommandBarText {")
+          + "final class Catalog: Fixture {\n"
+          + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
+                        "    static func selectionEntries(")
+          + "}\n}\n")
     write("CommandBarBrightness.swift", "import AppKit\n"
           + "extension CommandBarFeatureTests.BrightnessHost {\n"
           + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
@@ -570,6 +623,7 @@ def main():
           + declaration(mixer, "    private struct OutputAdjustment {")
           + declaration(mixer, "    private struct OutputStep {")
           + "private var queuedOutputSteps: [OutputStep] = []\nvar outputStepReadInFlight = false\nvar outputStepReadGeneration = 0\n"
+          + "private var lastOutputStep: (device: AudioObjectID, lifetime: UUID, from: Double, to: Double)?\n"
           + "static func hasSettableOutputVolume(for device: AudioObjectID) -> Bool { true }\n"
           + "static func outputVolume(for device: AudioObjectID) -> Float32? { Hardware.volume }\n"
           + "static func outputMuted(for device: AudioObjectID) -> Bool? { Hardware.muted }\n"
@@ -585,9 +639,11 @@ def main():
           + "static func defaultOutputDeviceID() -> AudioObjectID { Hardware.device }\n"
           + "static func setOutputVolume(_ value: Float, for device: AudioObjectID) -> Bool {\n"
           + "Hardware.writes.append(.init(device: device, volume: value, muted: nil))\n"
+          + "if let accepts = Hardware.accepts { Hardware.volume = accepts(value) }\n"
           + "let after = Hardware.afterVolumeWrite; Hardware.afterVolumeWrite = nil; after?()\nreturn Hardware.succeeds\n}\n"
           + "static func setOutputMuted(_ value: Bool, for device: AudioObjectID) -> Bool {\n"
           + "Hardware.writes.append(.init(device: device, volume: nil, muted: value)); return Hardware.succeeds\n}\n"
+          + "static func setSystemOutputVolume(_ volume: Double) -> Bool { setOutputVolume(Float(volume), for: Hardware.device) }\n"
           + "func scheduleListenerRefresh() { listenerRefreshes += 1 }\n"
           + "func scheduleOutputControlRefresh(for device: AudioObjectID) { controlRefreshes.append(device) }\n"
           + "func selectOutput(_ device: AudioObjectID?, volume: Double?, muted: Bool?) {\n"
@@ -598,8 +654,10 @@ def main():
               "    func requestOutputStep(", "    func requestOutputMuteToggle(",
               "    private func enqueueOutputKey(", "    private func settleQueuedOutputSteps(",
               "    private func applyQueuedOutputSteps(",
+              "    private func roundedBackStepLevel(", "    private func rememberOutputStep(",
               "    private func isCurrentOutputAdjustment(", "    private var hasCurrentOutputAdjustment:",
-              "    private func applyOutputControls(", "    private func drainOutputAdjustment("])
+              "    private func applyOutputControls(", "    private func drainOutputAdjustment(",
+              "    func setCurrentOutputVolume("])
           + "}\n}\n")
     write("NotchVolumeRouting.swift", "import Foundation\nimport CoreGraphics\n"
           + "extension NotchVolumeRoutingTests {\nfinal class Service: State {\n"
@@ -699,6 +757,12 @@ def main():
           + "}\n}\n")
 
     updates = "Sources/Vorssaint/Services/AppUpdates/AppUpdatesService.swift"
+    write("AppUpdateHandoff.swift", "import Foundation\nextension AppUpdateHandoffTests {\n"
+          + "final class Service: State {\n"
+          + "".join(declaration(updates, prefix).replace("private func", "func", 1)
+                    for prefix in ["    var updateHandoffPending:", "    private func handOff(",
+                                   "    func applicationBecameActive()", "    func consumeUpdateHandoffReturn()"])
+          + "}\n}\n")
     loader = "Sources/Vorssaint/Services/AppUpdates/AppUpdateFeedLoader.swift"
     # Only the network configuration, clock and declaration visibility change.
     # The loader, batch loop, catalog matching and fallback resolution stay verbatim.
@@ -1291,11 +1355,34 @@ def main():
           + "}\n")
 
     preview = "Sources/Vorssaint/Services/QuickTools/ScreenshotQuickPreviewController.swift"
+    screen_text = "Sources/Vorssaint/Services/QuickTools/ScreenTextService.swift"
+    write("ScreenshotOCRControl.swift", "import AppKit\nimport SwiftUI\n"
+          + "extension ScreenshotOCRControlTests {\n"
+          + declaration(preview, "final class ScreenshotQuickPreviewModel:")
+          + declaration(preview, "private struct ScreenshotQuickPreviewView:").replace("private struct", "struct", 1)
+          + declaration(preview, "private struct ScreenshotPreviewActionStyle:").replace("private struct", "struct", 1)
+          + declaration("Sources/Vorssaint/UI/Notch/NotchComponents.swift", "struct NotchButtonStyle:")
+          + "enum ScreenshotQuickPreviewController {\n"
+          + declaration(preview, "    enum Action {")
+          + declaration(preview, "    fileprivate static func size(").replace("fileprivate", "", 1)
+          + "}\n}\nextension View {\n"
+          + declaration("Sources/Vorssaint/UI/Screenshot/ScreenshotEditorView.swift", "    func screenshotSafeHelp(")
+              .replace("    func", "    @ViewBuilder\n    func", 1)
+          + "}\n")
+    write("ScreenTextCompletion.swift", "import Foundation\n"
+          + "extension ScreenTextCompletionTests {\nfinal class ScreenTextService: State {\n"
+          + "".join(declaration(screen_text, prefix).replace("private func", "func", 1)
+                    for prefix in ["    func copyText(", "    func receiveUnifiedCapture(",
+                                   "    private func recognize(", "    func syncWithPreferences()",
+                                   "    func suspend()", "    private func cancelSession()",
+                                   "    enum Outcome:"])
+          + "}\n}\n")
     write("ScreenshotShareCompletion.swift", "import Foundation\n"
           + "extension ScreenshotShareCompletionTests {\nfinal class Controller: State {\n"
           + "".join(declaration(preview, prefix).replace("private func", "func", 1)
                     for prefix in ["    func shareLink()", "    private func performShare(",
-                                   "    private func copySharedLink()", "    private func scheduleAutoDismiss("])
+                                   "    private func copySharedLink()", "    private func scheduleAutoDismiss(",
+                                   "    private func copyText()"])
           + "}\nfinal class Editor: EditorState {\n"
           + declaration("Sources/Vorssaint/Services/QuickTools/ScreenshotEditorController.swift",
                         "    func share(duration:")
@@ -1313,7 +1400,8 @@ def main():
                                    "    func openEditor(with", "    func editorDidClose(",
                                    "    private func invalidateLatestCaptureUploads()",
                                    "    private func beginLatestCapture(", "    private func discardLatestCapture(",
-                                   "    private func withholdLatestCapture()", "    private func syncLatestCapture("])
+                                   "    private func withholdLatestCapture()", "    private func syncLatestCapture(",
+                                   "    func afterAutoCopy("])
           + "}\n}\n")
     write("ScreenshotAutoShelf.swift", "import Foundation\n"
           + "extension ScreenshotAutoShelfTests {\n@MainActor final class Service: State {\n"
