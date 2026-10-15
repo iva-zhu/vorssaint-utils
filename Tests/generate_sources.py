@@ -1006,7 +1006,8 @@ def main():
     music_visibility = music_visibility.replace("AppFeature.connectedDevices.isAvailable",
                                                 "AppFeature.connectedDevices.isAvailable(in: ReviewDefaults.current)")
     write("NotchMusicVisibility.swift", "import Foundation\nextension NotchMusicVisibilityTests {\n"
-          + "final class Service: State {\n" + music_visibility + "}\n}\n")
+          + "final class Service: State {\nfunc resignPanelKey() { panel?.resignKey() }\n"
+          + music_visibility + "}\n}\n")
     write("NotchScreenEdgeClicks.swift", "import AppKit\nextension NotchScreenEdgeClickTests {\nfinal class Service: State {\n"
           + "func open() { openings += 1; expanded = true; syncScreenEdgeClicks() }\n"
           + "".join(declaration(notch, prefix).replace("    private ", "    ", 1) for prefix in [
@@ -1061,6 +1062,7 @@ def main():
           + "}\n}\n")
     write("NotchPresentationRefresh.swift", "import AppKit\nimport Foundation\nimport Combine\nimport SwiftUI\n"
           + "extension NotchPresentationRefreshContract {\nfinal class Service: State {\n"
+          + "func resignPanelKey() { panel?.resignKey() }\n"
           + "func hover(_ entered: Bool) {\nlet wasInside = inside\n"
           + "inside = windowHost?.containsHover(NSEvent.mouseLocation) == true\n"
           + "hoverState.update(pointerInside: inside)\nupdateCaptureControlsHover(wasInside: wasInside)\n}\n"
@@ -1160,6 +1162,7 @@ def main():
           + "func removeHoverExitMonitors() {}\n"
           + declaration(notch, "    func showScratchpad(")
               .replace("NotchSupport.routesScratchpad()", "NotchSupport.routesScratchpad(in: ReviewDefaults.current)")
+          + declaration(notch, "    func resignPanelKey()")
           + declaration(notch, "    func toggleSections()")
           + declaration(notch, "    func goBack()")
           + declaration(notch, "    private func stepBack()").replace("private func", "func", 1)
@@ -1833,7 +1836,10 @@ def main():
           + "".join(declaration(window_directional, prefix).replace("private ", "", 1)
                     for prefix in ["private enum WindowEdgeSnapPointerInput {",
                                    "private struct WindowEdgeSnapDrag {",
-                                   "private struct WindowLayoutTarget {"])
+                                   "private struct WindowLayoutTarget {",
+                                   "private struct WindowPointerGesture {",
+                                   "private struct PendingWindowGesture {",
+                                   "private struct WindowGestureTarget {"])
           + "final class Host: Fixture {\n"
           + "".join(declaration(window_directional, prefix).replace("private ", "", 1)
                     .replace("AXIsProcessTrusted()", "WindowEdgeSnapRuntimeTests.accessibilityGranted")
@@ -1853,7 +1859,15 @@ def main():
               "    private func armEdgeSnapStillCheck(",
               "    private func resetEdgeSnapTrail()",
               "    private func applyEdgeSnap(",
-              "    private func cancelEdgeSnapTracking()"])
+              "    private func cancelEdgeSnapTracking()",
+              "    private var edgeSnapCanTrack:",
+              "    private func forwardToEdgeSnap(",
+              "    private var gestureState:",
+              "    private var trackedGestureButton:",
+              "    private func handleGestureEvent(",
+              "    private func gestureChord(",
+              "    private func arm(",
+              "    private func promote("])
           + "}\n}\n")
     write("WindowGestureApplyRuntime.swift", "import AppKit\nimport CoreGraphics\nimport Foundation\n"
           + "extension WindowGestureApplyRuntimeTests {\n"
