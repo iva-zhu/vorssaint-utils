@@ -220,6 +220,9 @@ struct GlobalShortcut: Equatable, Hashable {
     // N for notes, on the same free control-option-command layer.
     static let scratchpadDefault = GlobalShortcut(keyCode: Int64(kVK_ANSI_N),
                                                   modifiers: [.control, .option, .command])
+    // I for island, on the same free control-option-command layer.
+    static let notchDefault = GlobalShortcut(keyCode: Int64(kVK_ANSI_I),
+                                             modifiers: [.control, .option, .command])
     // L for library (S already belongs to the sound output switcher), on the
     // same free control-option-command layer.
     static let snippetLibraryDefault = GlobalShortcut(keyCode: Int64(kVK_ANSI_L),
@@ -725,6 +728,7 @@ enum GlobalShortcutRole: CaseIterable, Identifiable {
     case keyboardBrightnessDecrease
     case keyboardBrightnessIncrease
     case pointerNextDisplay
+    case notch
 
     var id: String { storageKey }
 
@@ -760,6 +764,7 @@ enum GlobalShortcutRole: CaseIterable, Identifiable {
         case .keyboardBrightnessDecrease: return DefaultsKey.keyboardBrightnessDecreaseShortcut
         case .keyboardBrightnessIncrease: return DefaultsKey.keyboardBrightnessIncreaseShortcut
         case .pointerNextDisplay: return DefaultsKey.pointerDisplayShortcut
+        case .notch: return DefaultsKey.notchShortcut
         }
     }
 
@@ -795,6 +800,7 @@ enum GlobalShortcutRole: CaseIterable, Identifiable {
         case .keyboardBrightnessDecrease: return .keyboardBrightnessDecreaseDefault
         case .keyboardBrightnessIncrease: return .keyboardBrightnessIncreaseDefault
         case .pointerNextDisplay: return .pointerNextDisplayDefault
+        case .notch: return .notchDefault
         }
     }
 
@@ -864,6 +870,7 @@ enum GlobalShortcutRole: CaseIterable, Identifiable {
         case .keyboardBrightnessIncrease:
             return FeatureStrings.brightness(L10n.shared.language).keyboardBrightnessIncrease
         case .pointerNextDisplay: return PointerDisplayStrings.localized(L10n.shared.language).title
+        case .notch: return FeatureStrings.notch(L10n.shared.language).title
         }
     }
 
@@ -922,6 +929,7 @@ enum GlobalShortcutRole: CaseIterable, Identifiable {
         case .keyboardBrightnessDecrease, .keyboardBrightnessIncrease:
             return [DefaultsKey.keyboardBrightnessShortcutsEnabled]
         case .pointerNextDisplay: return [DefaultsKey.pointerDisplayEnabled]
+        case .notch: return [DefaultsKey.notchEnabled, DefaultsKey.notchShortcutEnabled]
         }
     }
 
@@ -954,6 +962,7 @@ enum GlobalShortcutRole: CaseIterable, Identifiable {
         case .displayBrightnessDecrease, .displayBrightnessIncrease: return .brightness
         case .keyboardBrightnessDecrease, .keyboardBrightnessIncrease: return .brightness
         case .pointerNextDisplay: return .windowLayout
+        case .notch: return .notch
         }
     }
 
