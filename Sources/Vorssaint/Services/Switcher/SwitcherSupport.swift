@@ -522,6 +522,15 @@ struct SwitcherShortcutHints: Equatable {
 }
 
 enum SwitcherSupport {
+    /// Nobody sees a thumbnail while the displays sleep, the screen is locked
+    /// or another account is on screen, and capturing then only risks the
+    /// stall described on the capture queue (issue #1863).
+    static func screenIsInView(session: [String: Any]?, displaysAsleep: Bool) -> Bool {
+        SessionActivitySupport.isOnConsole(session)
+            && !KeepAwakeAutomationSupport.isScreenLocked(sessionDictionary: session)
+            && !displaysAsleep
+    }
+
     /// How long the shortcut must be held before the panel appears. A quick
     /// press can still switch directly without flashing the panel, while zero
     /// gives users who prefer immediate visual feedback an instant surface.
@@ -1791,10 +1800,18 @@ enum SwitcherSupport {
     /// table: the shared take-over speaks WindowServer ids, and reading the
     /// shortcut of each id from the table is what keeps a remapped key — or a
     /// neighbour such as the screenshot key — from being taken over by guess.
+    ///
+    /// Secure Event Input hides every key from event taps, the switcher's
+    /// included, while macOS still answers its own switcher keys (measured on
+    /// 27.2: a session tap saw no key while another process held it). Asking
+    /// for nothing then keeps ⌘Tab working instead of leaving it dead until
+    /// the app holding it lets go.
     static func nativeHotkeyIDs(takeOverSystemShortcuts: Bool,
+                                secureInputEnabled: Bool,
                                 appsShortcut: GlobalShortcut,
                                 windowShortcut: GlobalShortcut,
                                 liveEntries: [LiveSystemShortcut]) -> Set<Int32> {
+        guard !secureInputEnabled else { return [] }
         let nativeShortcuts = Dictionary(
             liveEntries.compactMap { entry -> (SwitcherNativeSymbolicHotKey, GlobalShortcut)? in
                 SwitcherNativeSymbolicHotKey(rawValue: entry.id).map { ($0, entry.shortcut) }

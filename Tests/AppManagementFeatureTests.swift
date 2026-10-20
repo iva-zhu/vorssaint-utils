@@ -613,6 +613,23 @@ enum AppManagementFeatureTests {
         suite.expect(InstalledApps.installedApplications(roots: [listedRoot]).map(\.name) == ["Mimo"],
                "the application walk lists a wrapper once, not the bundle inside it")
         try? FileManager.default.removeItem(at: selectionFixture)
+        // While the Finder shows every extension, the file manager spells an
+        // app's name with its ".app" ("Google Chrome.app"). The lists read it
+        // without, as the application walk above already does.
+        suite.expect(InstalledApps.displayName(fromFinderName: "Google Chrome.app") == "Google Chrome",
+               "an app's name is shown without the .app the file manager adds while the Finder shows every extension")
+        suite.expect(InstalledApps.displayName(fromFinderName: "Calculadora") == "Calculadora",
+               "an app's name that carries no extension is shown as it is")
+        suite.expect(InstalledApps.displayName(fromFinderName: "Foo.App") == "Foo.App",
+               "only a lowercase .app at the end of a name is taken off, as the application walk does")
+        if InstalledApps.url(for: "com.apple.finder") != nil {
+            suite.expect(!InstalledApps.name(for: "com.apple.finder").hasSuffix(".app"),
+                   "an installed app is named without .app, whatever the Finder's setting for extensions")
+        }
+        suite.expect(InstalledApps.name(for: "/opt/game/runtime/bin/java", finderName: { _ in "java.app" }) == "java",
+               "an app is named from the file manager's name without its .app")
+        suite.expect(InstalledApps.name(for: "com.example.not-installed.app") == "com.example.not-installed.app",
+               "an identifier that names no installed app is shown as it is, even when it ends in .app")
         for path in ["Sources/Vorssaint/UI/Uninstall/UninstallerView.swift",
                      "Sources/Vorssaint/UI/MenuPanel/PanelUninstallerView.swift"] {
             let pickerSource = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
