@@ -23,12 +23,10 @@ final class WindowPreviewProvider {
     private var cache: [CGWindowID: CGImage] = [:]
     private var lastTouched: [CGWindowID: TimeInterval] = [:]
     private static let cacheLimit = 48
-    /// Upper bound on the bytes the thumbnail cache may hold; the count limit
-    /// alone would allow ~160 MB of big-window thumbnails. 32 MB keeps every
-    /// card warm across invocations of a normal desktop while halving the
-    /// ceiling on 8–16 GB machines, where this is the app's largest
-    /// always-resident cache.
-    private static let cacheByteBudget = 32 * 1024 * 1024
+    /// Eviction target; entries being refreshed may exceed it. Keep the existing
+    /// budget: a smaller cache would discard more last-good previews of windows
+    /// parked by Stage Manager, which cannot be recaptured until reactivated.
+    private static let cacheByteBudget = 64 * 1024 * 1024
     private var captureTask: Task<Void, Never>?
     private var warmTask: Task<Void, Never>?
     private var activationToken: NSObjectProtocol?
@@ -68,7 +66,8 @@ final class WindowPreviewProvider {
                          maxPixelSize: CGFloat = defaultMaxPixelSize,
                          excludedAppsKey: String,
                          onUpdate: @escaping (CGWindowID, CGImage) -> Void) {
-        guard Permissions.shared.screenRecording, !Self.captureIsPaused(excludedAppsKey: excludedAppsKey) else {
+        guard Permissions.shared.screenRecording, Self.screenIsInView(),
+              !Self.captureIsPaused(excludedAppsKey: excludedAppsKey) else {
             cancel()
             return
         }
@@ -157,9 +156,9 @@ final class WindowPreviewProvider {
             let captureIsPaused = await MainActor.run { Self.captureIsPaused(excludedAppsKey: excludedAppsKey) }
             guard !captureIsPaused else { return }
 
-            guard let content = try? await SCShareableContent.excludingDesktopWindows(false,
-                                                                                      onScreenWindowsOnly: false)
-            else { return }
+            guard let content = await Self.windowServerCaptures.perform({
+                try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+            }) else { return }
             let scWindows = Dictionary(content.windows.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
 
             for target in pending {
@@ -183,9 +182,9 @@ final class WindowPreviewProvider {
                 configuration.showsCursor = false
 
                 let filter = SCContentFilter(desktopIndependentWindow: scWindow)
-                guard let image = try? await SCScreenshotManager.captureImage(contentFilter: filter,
-                                                                              configuration: configuration)
-                else { continue }
+                guard let image = await Self.windowServerCaptures.perform({
+                    try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+                }) else { continue }
                 guard !Task.isCancelled else { return }
 
                 // Stage Manager renders strip-parked windows as a small sheared
@@ -243,9 +242,21 @@ final class WindowPreviewProvider {
     /// other-Space windows come back as their real, untransformed content.
     private static let windowServerCaptureOptions: UInt32 = (1 << 8) | (1 << 11)
 
-    /// Shared by every preview provider and the screenshot tool. Cancelling a
-    /// caller must not let another capture overlap its unfinished system call.
-    private static let windowServerCaptures = WindowServerCaptureQueue()
+    /// Shared by every preview provider, the screenshot tool and Watch.
+    /// Cancelling a caller must not let another capture overlap its
+    /// unfinished system call.
+    private static let windowServerCaptures = WindowServerCaptureQueue(
+        checkPermission: WindowServerCaptureQueue.screenRecordingCheck ?? {})
+
+    /// ScreenCaptureKit captures that run on their own, like Watch's
+    /// readings, take their turn with the window-server ones.
+    static func captureViaScreenCaptureKit<Value>(_ operation: @escaping () async -> Value?) async -> Value? {
+        await windowServerCaptures.perform(operation)
+    }
+
+    /// Paused, or stuck behind a capture that has not come back: a capture
+    /// asked for now is refused, which says nothing about the window.
+    static var capturesArePaused: Bool { !windowServerCaptures.acceptsCaptures }
 
     /// Internal so the screenshot tool can reuse the existing window capture.
     /// Background warming passes `waitingForOtherCaptures: false`: it is
@@ -444,12 +455,14 @@ final class WindowPreviewProvider {
     private func scheduleWarm(pid: pid_t) {
         // Only the switcher warms, so its own paused apps apply.
         let excludedAppsKey = DefaultsKey.switcherPreviewExcludedApps
-        guard Permissions.shared.screenRecording, !Self.captureIsPaused(excludedAppsKey: excludedAppsKey) else { return }
+        guard Permissions.shared.screenRecording, Self.screenIsInView(),
+              !Self.captureIsPaused(excludedAppsKey: excludedAppsKey) else { return }
         pendingWarmPid = pid
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
             guard let self,
                   self.pendingWarmPid == pid,
                   self.activationToken != nil,
+                  Self.screenIsInView(),
                   !Self.captureIsPaused(excludedAppsKey: excludedAppsKey)
             else { return }
             self.pendingWarmPid = nil
@@ -509,11 +522,20 @@ final class WindowPreviewProvider {
         }
     }
 
+    /// Apps still become active with the displays off, as when a script
+    /// launches one, so the switcher asks before capturing.
+    private static func screenIsInView() -> Bool {
+        SwitcherSupport.screenIsInView(session: CGSessionCopyCurrentDictionary() as? [String: Any],
+                                       displaysAsleep: CGDisplayIsAsleep(CGMainDisplayID()) != 0)
+    }
+
     private static func captureIsPaused(excludedAppsKey: String) -> Bool {
         let excluded = Defaults.sanitizedBundleIdentifierList(
             UserDefaults.standard.stringArray(forKey: excludedAppsKey) ?? [])
+        let front = NSWorkspace.shared.frontmostApplication
         return SwitcherSupport.shouldPausePreviewCapture(
-            frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            frontmostBundleIdentifier: front?.bundleIdentifier,
+            frontmostExecutablePath: front?.executableURL?.path,
             excludedBundleIdentifiers: excluded)
     }
 
