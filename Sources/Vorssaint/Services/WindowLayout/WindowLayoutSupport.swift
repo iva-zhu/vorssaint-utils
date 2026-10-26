@@ -778,7 +778,7 @@ enum WindowLayoutGeometry {
     /// the minimum length and never enlarges a window already below it.
     static func steppedRect(_ current: CGRect, by step: CGFloat, in visibleFrame: CGRect) -> CGRect {
         func length(_ value: CGFloat, limit: CGFloat) -> CGFloat {
-            if step >= 0 { return min(limit, max(value, value + step * 2)) }
+            if step >= 0 { return min(max(limit, value), max(value, value + step * 2)) }
             return min(value, max(resizeMinimumLength, value + step * 2))
         }
         let width = length(current.width, limit: visibleFrame.width)
@@ -786,8 +786,14 @@ enum WindowLayoutGeometry {
         var x = current.midX - width / 2
         var y = current.midY - height / 2
         if step >= 0 {
-            x = min(max(x, visibleFrame.minX), visibleFrame.maxX - width)
-            y = min(max(y, visibleFrame.minY), visibleFrame.maxY - height)
+            // The visible frame joined with the window's own frame: a window
+            // against the screen edge still grows away from it, while a side
+            // that hangs past the frame (under a Dock, past a screen side or
+            // partly on another display) keeps hanging instead of being
+            // pulled inward, which would shrink it.
+            let joined = visibleFrame.union(current)
+            x = min(max(x, joined.minX), joined.maxX - width)
+            y = min(max(y, joined.minY), joined.maxY - height)
         }
         return CGRect(x: x, y: y, width: width, height: height).integral
     }
@@ -866,15 +872,22 @@ enum WindowLayoutGeometry {
             break
         }
 
-        if size.width <= visibleFrame.width {
-            origin.x = min(max(origin.x, visibleFrame.minX), visibleFrame.maxX - size.width)
+        // A step follows the window's own frame, which may hang past the
+        // visible frame under a Dock, past a screen side or partly on another
+        // display, and the refused size of a hanging window does too. Clamping
+        // such a step inside the visible frame alone would pull the window
+        // inward and make it miss the step, so a step is clamped inside the
+        // visible frame joined with its own target instead.
+        let clampRect = action.isStepResize ? visibleFrame.union(targetRect) : visibleFrame
+        if size.width <= clampRect.width {
+            origin.x = min(max(origin.x, clampRect.minX), clampRect.maxX - size.width)
         } else {
-            origin.x = visibleFrame.minX
+            origin.x = clampRect.minX
         }
-        if size.height <= visibleFrame.height {
-            origin.y = min(max(origin.y, visibleFrame.minY), visibleFrame.maxY - size.height)
+        if size.height <= clampRect.height {
+            origin.y = min(max(origin.y, clampRect.minY), clampRect.maxY - size.height)
         } else {
-            origin.y = visibleFrame.minY
+            origin.y = clampRect.minY
         }
         return CGRect(origin: origin, size: size).integral
     }

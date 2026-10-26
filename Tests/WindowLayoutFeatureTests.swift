@@ -983,6 +983,44 @@ enum WindowLayoutFeatureTests {
                                                            originalRect: stepOriginal,
                                                            tolerance: 8),
                "a window that never changed size refused the step, one that resized did not")
+        // A window that hangs past the visible frame keeps hanging: no side of
+        // a step is pulled inward, and a hung-over refused size still reads
+        // back as the quiet no-op the settle puts back.
+        let hangingWindow = CGRect(x: 600, y: 300, width: 1030, height: 400)
+        let grownHanging = WindowLayoutGeometry.rect(for: .makeLarger, current: hangingWindow, visibleFrame: visibleFrame)
+        suite.expect(grownHanging.maxX == hangingWindow.maxX && grownHanging.width == 1050
+                && grownHanging.minX == 580,
+               "make larger grows a hanging window away from the visible frame instead of pulling its hanging side in")
+        let wideWindow = CGRect(x: 0, y: 300, width: 1500, height: 400)
+        let grownWide = WindowLayoutGeometry.rect(for: .makeLarger, current: wideWindow, visibleFrame: visibleFrame)
+        suite.expect(grownWide.width == 1500 && grownWide.height == 420,
+               "make larger leaves a side that already spans the visible frame at its own size")
+        let shrunkHangingTarget = WindowLayoutGeometry.rect(for: .makeSmaller, current: hangingWindow, visibleFrame: visibleFrame)
+        let shrunkHanging = WindowLayoutGeometry.anchoredRect(for: .makeSmaller,
+                                                             targetRect: shrunkHangingTarget,
+                                                             actualSize: shrunkHangingTarget.size,
+                                                             visibleFrame: visibleFrame)
+        suite.expect(shrunkHanging == shrunkHangingTarget
+                && WindowLayoutGeometry.stepResizeAccepts(actualRect: shrunkHanging,
+                                                         targetRect: shrunkHangingTarget,
+                                                         originalRect: hangingWindow),
+               "make smaller of a window hanging past the visible frame keeps its center instead of clamping inside the frame")
+        let tallWindow = CGRect(x: 400, y: 100, width: 600, height: 1000)
+        let shrunkTallTarget = WindowLayoutGeometry.rect(for: .makeSmaller, current: tallWindow, visibleFrame: visibleFrame)
+        suite.expect(WindowLayoutGeometry.anchoredRect(for: .makeSmaller,
+                                                       targetRect: shrunkTallTarget,
+                                                       actualSize: shrunkTallTarget.size,
+                                                       visibleFrame: visibleFrame)
+               == shrunkTallTarget,
+               "make smaller of a window taller than the visible frame keeps its center instead of pinning its top edge")
+        let refusedHanging = WindowLayoutGeometry.anchoredRect(for: .makeSmaller,
+                                                               targetRect: shrunkHangingTarget,
+                                                               actualSize: hangingWindow.size,
+                                                               visibleFrame: visibleFrame)
+        suite.expect(WindowLayoutGeometry.stepResizeRefused(actualRect: refusedHanging,
+                                                            originalRect: hangingWindow,
+                                                            tolerance: 8),
+               "a refused step of a hanging window still reads back as the quiet no-op the settle puts back")
         suite.expect(WindowLayoutGeometry.rect(for: .center, current: currentWindow, visibleFrame: visibleFrame,
                                          screenGap: 32)
                == WindowLayoutGeometry.rect(for: .center, current: currentWindow, visibleFrame: visibleFrame),

@@ -714,13 +714,19 @@ final class WindowLayoutService: ObservableObject {
                                                   originalRect: appKitFrame(fromAX: original),
                                                   tolerance: frameTolerance) {
             // The app kept its size (its minimum, or a grid coarser than the
-            // step): nothing changed, so there is nothing to restore or report.
+            // step): nothing changed, so there is nothing to restore or
+            // report. The anchoring may still have moved the window, since
+            // the step's center is not the window's own once the frame hangs
+            // past the visible frame, so put the original frame back — an app
+            // only slower than the settle then applies its size there instead
+            // of off center.
             frameHistory.discardLatest(for: context.windowKey)
             if let previousAction = context.previousAction {
                 lastActions[context.windowKey] = previousAction
             } else {
                 lastActions.removeValue(forKey: context.windowKey)
             }
+            applyFrame(original, on: context.window)
             return
         }
         if let original = context.original {
