@@ -795,6 +795,19 @@ enum PointerInputFeatureTests {
         smoothEngine.add(vertical: 40, horizontal: 0)
         suite.expect(smoothEngine.remainingVertical == 40,
                "one wheel tick queues one step of glide")
+        var scrollTarget = SmoothScrollSupport.TargetLatch()
+        let firstScrollTarget = SmoothScrollSupport.Target(
+            point: CGPoint(x: 120, y: 240), processID: 41, windowNumber: 100)
+        let nextScrollTarget = SmoothScrollSupport.Target(
+            point: CGPoint(x: 900, y: 600), processID: 42, windowNumber: 200)
+        suite.expect(scrollTarget.update(firstScrollTarget)
+                && !scrollTarget.update(firstScrollTarget) && scrollTarget.target == firstScrollTarget,
+               "wheel input at the same target can extend the existing glide")
+        suite.expect(scrollTarget.update(nextScrollTarget) && scrollTarget.target == nextScrollTarget,
+               "fresh wheel input elsewhere replaces the old glide target immediately")
+        scrollTarget.reset()
+        suite.expect(scrollTarget.target == nil,
+               "a finished or cancelled glide releases its target")
         smoothEngine.add(vertical: 80, horizontal: 20)
         suite.expect(smoothEngine.remainingVertical == 120 && smoothEngine.remainingHorizontal == 20,
                "same-direction input adds to what is left on each axis")
@@ -2048,10 +2061,19 @@ enum PointerInputFeatureTests {
                 && MouseSpacesGestureSupport.resolved(.spaceLeft, followsDrag: false) == .spaceLeft,
                "the Space can follow the hand instead of the pointer, and the overviews never swap")
 
-        suite.expect(MouseSpacesGestureSupport.canBind(3) && MouseSpacesGestureSupport.canBind(31)
-                && !MouseSpacesGestureSupport.canBind(2) && !MouseSpacesGestureSupport.canBind(32)
-                && !MouseSpacesGestureSupport.canBind(MouseButtonShortcutSupport.sideWheelLeftInput),
-               "the drag lives on an extra button, never on a side-wheel tick there is no way to hold")
+        suite.expect(MouseSpacesGestureSupport.canBind(2) && MouseSpacesGestureSupport.canBind(3)
+                && MouseSpacesGestureSupport.canBind(31) && !MouseSpacesGestureSupport.canBind(32)
+                && !MouseSpacesGestureSupport.canBind(0) && !MouseSpacesGestureSupport.canBind(1)
+                && !MouseSpacesGestureSupport.canBind(MouseButtonShortcutSupport.sideWheelLeftInput)
+                && !MouseSpacesGestureSupport.canBind(MouseButtonShortcutSupport.sideWheelRightInput),
+               "the drag accepts middle and extra buttons, leaving primary buttons and side-wheel ticks alone")
+
+        for language in AppLanguage.allCases {
+            let strings = FeatureStrings.mouseButtons(language)
+            suite.expect(!strings.middleButtonName.isEmpty
+                    && MouseButtonShortcutSupport.buttonName(for: 2, strings: strings) == strings.middleButtonName,
+                   "the middle button has a clear name in \(language.rawValue)")
+        }
 
         suite.expect(MouseSpacesGestureSupport.boundButton(isAvailable: true, isEnabled: true, button: 4,
                                                      hasShortcut: { _ in false },
