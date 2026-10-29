@@ -18,9 +18,42 @@ struct AdvancedSettings: View {
     @State private var importFailed = false
     @State private var pendingImport: [String: Any]?
     @State private var showImportConfirm = false
+    @AppStorage(DefaultsKey.settingsAutoExportPath) private var autoExportPath = ""
 
     private var backup: BackupFeatureStrings {
         FeatureStrings.backup(l10n.language)
+    }
+
+    /// Enabling the mirror needs a file: without a saved one, the store
+    /// panel comes up first and the choice lives only when it succeeds.
+    private var autoExportEnabled: Binding<Bool> {
+        Binding(
+            get: { UserDefaults.standard.bool(forKey: DefaultsKey.settingsAutoExportEnabled) },
+            set: { on in
+                guard on else {
+                    UserDefaults.standard.set(false, forKey: DefaultsKey.settingsAutoExportEnabled)
+                    return
+                }
+                if SettingsBackupSupport.autoExportURL(path: autoExportPath) != nil {
+                    UserDefaults.standard.set(true, forKey: DefaultsKey.settingsAutoExportEnabled)
+                } else if let url = chooseAutoExportFile() {
+                    autoExportPath = url.path
+                    UserDefaults.standard.set(true, forKey: DefaultsKey.settingsAutoExportEnabled)
+                }
+            })
+    }
+
+    private func chooseAutoExportFile() -> URL? {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "Vorssaint Settings.plist"
+        panel.allowedContentTypes = [.propertyList]
+        panel.canCreateDirectories = true
+        if let current = SettingsBackupSupport.autoExportURL(path: autoExportPath) {
+            panel.directoryURL = current.deletingLastPathComponent()
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK else { return nil }
+        return panel.url
     }
 
     var body: some View {
@@ -65,6 +98,29 @@ struct AdvancedSettings: View {
                     Text(backup.invalidFile)
                         .font(.caption)
                         .foregroundStyle(.orange)
+                }
+
+                Divider()
+                Toggle(backup.autoExportToggle, isOn: autoExportEnabled)
+                Text(backup.autoExportCaption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let saved = SettingsBackupSupport.autoExportURL(path: autoExportPath) {
+                    Label((saved.path as NSString).abbreviatingWithTildeInPath,
+                          systemImage: "doc.badge.arrow.up")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                if autoExportEnabled.wrappedValue {
+                    Button {
+                        if let url = chooseAutoExportFile() {
+                            autoExportPath = url.path
+                        }
+                    } label: {
+                        Label(backup.autoExportChoose, systemImage: "folder")
+                    }
                 }
             }
 

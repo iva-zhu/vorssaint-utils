@@ -40,6 +40,39 @@ enum SettingsBackupSupport {
         return nil
     }
 
+    // MARK: Automatic export (issue #497)
+
+    /// Coalescing for the automatic settings export: preference writes arrive
+    /// in bursts — drags, list edits, multi-row saves — and a burst must cost
+    /// one file write, not one per row. The first change of a burst schedules
+    /// a write; while it waits out the debounce, every further change is
+    /// absorbed by the write already scheduled for the burst.
+    struct SettingsAutoExportSchedule: Equatable {
+        private(set) var writeIsPending = false
+
+        /// true when this change must schedule a write (it is the first of a
+        /// burst), false when the write already pending will carry it.
+        mutating func changeArrived() -> Bool {
+            let schedules = !writeIsPending
+            writeIsPending = true
+            return schedules
+        }
+
+        /// The write happened; the next change schedules a new one.
+        mutating func writeSettled() {
+            writeIsPending = false
+        }
+    }
+
+    /// The file the automatic export mirrors settings into. nil for an empty
+    /// or relative path; `~` expands to the given home.
+    static func autoExportURL(path: String, home: String = NSHomeDirectory()) -> URL? {
+        guard !path.isEmpty else { return nil }
+        let expanded = path.hasPrefix("~") ? home + path.dropFirst() : path
+        guard expanded.hasPrefix("/") else { return nil }
+        return URL(fileURLWithPath: (expanded as NSString).standardizingPath)
+    }
+
     /// Keys the backup carries: every registered preference, the availability
     /// layer, and the deliberately unregistered selection/layout keys — minus
     /// state that belongs to one machine or one moment.

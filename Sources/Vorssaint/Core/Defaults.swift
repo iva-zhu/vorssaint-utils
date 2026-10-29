@@ -978,6 +978,12 @@ enum DefaultsKey {
     static let radialMenuItems = "radialMenuItems"        // Data: [RadialMenuItem] JSON
     static let radialMenuProfiles = "radialMenuProfiles"  // Data: [RadialMenuProfile] JSON
 
+    // Automatic settings export (issue #497): when on, the settings backup is
+    // rewritten to the chosen file as preferences settle. Both travel with the
+    // backup, so mirroring survives an import on another Mac.
+    static let settingsAutoExportEnabled = "settingsAutoExportEnabled"
+    static let settingsAutoExportPath = "settingsAutoExportPath" // absolute file path
+
     // Dev-build only: force the "update available" UI for local testing.
     static let simulateUpdate = "simulateUpdate"
     static let simulateBetaUI = "simulateBetaUI"
@@ -1317,6 +1323,9 @@ enum Defaults {
         DefaultsKey.showReleaseNotesBeforeUpdate: true,
         DefaultsKey.updateShowcaseIntroVersion: "",
         DefaultsKey.updateShowcaseMediaOverride: "",
+        // The settings mirror (issue #497) is opt-in and starts with no file.
+        DefaultsKey.settingsAutoExportEnabled: false,
+        DefaultsKey.settingsAutoExportPath: "",
         DefaultsKey.mixerShowFinder: true,
         DefaultsKey.mixerHideInactiveApps: false,
         DefaultsKey.mixerAppArrangement: "",

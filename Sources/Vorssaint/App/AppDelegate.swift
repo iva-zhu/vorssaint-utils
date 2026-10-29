@@ -99,6 +99,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         // person chooses what they actually want.
         FeaturePreset.prepareFirstRunAvailability()
 
+        // The settings mirror (issue #497) watches preference changes itself;
+        // it only ever writes when the user opted in and chose a file.
+        SettingsAutoExporter.shared.start()
+
         // Redo a launch at login registration the system lost. The stored
         // choice is the last thing the user expressed in the app; startup
         // never turns the item off. It runs off the main thread, since
@@ -353,6 +357,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         AudioInputDeviceManager.shared.stop()
         // Flushes any scratchpad edit still inside the save debounce.
         ScratchpadService.shared.suspend()
+        // A settings change still inside the mirror's debounce must not die
+        // with the process: the dotfile should hold the last settled state.
+        SettingsAutoExporter.shared.writePendingNow()
         // Every macOS shortcut a feature took over goes back now, whichever
         // feature held it; not all of them suspend here.
         SystemShortcutTakeover.restoreAll()

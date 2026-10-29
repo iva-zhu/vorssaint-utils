@@ -173,3 +173,89 @@ enum SettingsBackup {
         exit(EXIT_FAILURE)
     }
 }
+
+/// Automatic settings export (issue #497): when the user opts in on the
+/// Advanced page, the same backup the Export button writes is rewritten to a
+/// chosen file as preferences change. Dotfiles users point the file at a
+/// tracked path and keep the app's setup in a repository; Import settings and
+/// `--import-settings` read the very same file back. A burst of changes waits
+/// out a short debounce and lands as one file write, not one per row.
+final class SettingsAutoExporter {
+    static let shared = SettingsAutoExporter()
+    /// Idle time after the last preference write before the file is rewritten.
+    static let debounce: TimeInterval = 2
+
+    private var schedule = SettingsBackupSupport.SettingsAutoExportSchedule()
+    private var workItem: DispatchWorkItem?
+    private var observer: NSObjectProtocol?
+
+    /// The file the mirror writes into, or nil when the option is off or the
+    /// saved path is not usable.
+    private func writeURL() -> URL? {
+        guard UserDefaults.standard.bool(forKey: DefaultsKey.settingsAutoExportEnabled) else {
+            return nil
+        }
+        return SettingsBackupSupport.autoExportURL(
+            path: UserDefaults.standard.string(forKey: DefaultsKey.settingsAutoExportPath) ?? "")
+    }
+
+    /// One observer for the life of the app. Writes only ever happen when the
+    /// option is on and a file was chosen, so nobody who never turned the
+    /// mirror on pays for it.
+    func start() {
+        guard observer == nil else { return }
+        observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main) { [weak self] _ in
+            self?.settingsChanged()
+        }
+    }
+
+    /// Reacts to one preference change: without a usable file, drop anything
+    /// pending; with one, let a burst finish settling before it lands on disk
+    /// as a single write.
+    func settingsChanged() {
+        guard let url = writeURL() else {
+            workItem?.cancel()
+            workItem = nil
+            schedule.writeSettled()
+            return
+        }
+        scheduleWrite(to: url)
+    }
+
+    private func scheduleWrite(to url: URL) {
+        // The first change of a burst marks the write; any change arriving
+        // while that write waits restarts the debounce, so the file lands on
+        // disk once, a beat after the burst has actually settled.
+        _ = schedule.changeArrived()
+        workItem?.cancel()
+        let pending = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            workItem = nil
+            writeSettings(to: url)
+        }
+        workItem = pending
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounce, execute: pending)
+    }
+
+    /// A change still inside its debounce would die with the process. Write it
+    /// out now (called from applicationWillTerminate).
+    func writePendingNow() {
+        guard schedule.writeIsPending, let url = writeURL() else { return }
+        workItem?.cancel()
+        workItem = nil
+        schedule.writeSettled()
+        writeSettings(to: url)
+    }
+
+    private func writeSettings(to url: URL) {
+        // The scratchpad document is part of the export; the manual Export
+        // button first pushes its pending edits into the snapshot, so the
+        // mirror sends the same complete file.
+        ScratchpadService.shared.prepareForSettingsBackup()
+        schedule.writeSettled()
+        _ = SettingsBackup.write(to: url)
+    }
+}

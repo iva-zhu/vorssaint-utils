@@ -18,6 +18,10 @@ struct BackupFeatureStrings {
     let importMissingIslandBody: String
     let importAction: String
     let invalidFile: String
+    // Automatic export to a chosen file as settings change (issue #497).
+    let autoExportToggle: String
+    let autoExportChoose: String
+    let autoExportCaption: String
 }
 
 extension FeatureStrings {
@@ -54,7 +58,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "현재 설정이 파일의 설정으로 바뀌고 앱이 다시 시작됩니다. 이 Mac의 다른 항목은 변경되지 않습니다.",
         importMissingIslandBody: "이 백업에는 Dynamic Island 설정이 없습니다. 이 Mac의 해당 설정은 유지됩니다. 다른 Mac의 설정을 복사하려면 Vorssaint 3.4 이상에서 다시 내보내세요. 나머지 설정을 가져온 뒤 앱이 다시 시작됩니다.",
         importAction: "가져오고 다시 시작",
-        invalidFile: "이 파일은 유효한 Vorssaint 백업이 아닙니다."
+        invalidFile: "이 파일은 유효한 Vorssaint 백업이 아닙니다.",
+        autoExportToggle: "설정이 바뀔 때 파일에 기록",
+        autoExportChoose: "파일 선택…",
+        autoExportCaption: "설정이 바뀐 뒤 잠시 후에 선택한 파일로 백업을 다시 기록합니다. dotfiles 저장소에서 관리하는 경로를 지정하면 어디서든 설정 가져오기로 같은 설정을 복원합니다."
     )
     static let uk = BackupFeatureStrings(
         title: "Резервна копія",
@@ -67,7 +74,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "Ваші поточні налаштування замінюються файлом, і програма перезапускається. Нічого іншого на цьому Mac не зачіпається.",
         importMissingIslandBody: "У цій резервній копії немає налаштувань Dynamic Island. Налаштування на цьому Mac залишаться без змін. Щоб перенести їх з іншого Mac, експортуйте копію з Vorssaint 3.4 або новішої версії. Решту налаштувань буде імпортовано, а програму перезапущено.",
         importAction: "Імпортувати та перезапустити",
-        invalidFile: "Цей файл не є коректною резервною копією Vorssaint."
+        invalidFile: "Цей файл не є коректною резервною копією Vorssaint.",
+        autoExportToggle: "Записувати налаштування у файл при зміні",
+        autoExportChoose: "Вибрати файл…",
+        autoExportCaption: "Невдовзі після зміни налаштувань їхня копія перезаписується у вибраний файл. Вкажіть шлях, який відстежує репозиторій dotfiles, і «Імпортувати налаштування» прочитає його будь-де."
     )
 }
 
@@ -83,7 +93,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "Your current settings are replaced by the file’s and the app restarts. Nothing else on this Mac is touched.",
         importMissingIslandBody: "This backup has no Dynamic Island settings. This Mac’s island settings will be kept. Re-export with Vorssaint 3.4 or newer on the other Mac to copy them. Other settings will be imported and the app will restart.",
         importAction: "Import and restart",
-        invalidFile: "This file is not a valid Vorssaint backup."
+        invalidFile: "This file is not a valid Vorssaint backup.",
+        autoExportToggle: "Write settings to a file as they change",
+        autoExportChoose: "Choose file…",
+        autoExportCaption: "A settings change lands in the chosen file a beat after it settles. Point the file at a path tracked by a dotfiles repository, and Import settings reads it back anywhere."
     )
 
     static let ptBR = BackupFeatureStrings(
@@ -97,7 +110,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "As configurações atuais são substituídas pelas do arquivo e o app reinicia. Nada mais neste Mac é alterado.",
         importMissingIslandBody: "Este backup não contém configurações da Dynamic Island. As configurações dela neste Mac serão mantidas. Para copiá-las do outro Mac, exporte novamente com o Vorssaint 3.4 ou mais recente. As demais configurações serão importadas e o app reiniciará.",
         importAction: "Importar e reiniciar",
-        invalidFile: "Este arquivo não é um backup válido do Vorssaint."
+        invalidFile: "Este arquivo não é um backup válido do Vorssaint.",
+        autoExportToggle: "Gravar as configurações em um arquivo quando mudarem",
+        autoExportChoose: "Escolher arquivo…",
+        autoExportCaption: "Uma mudança de configuração é gravada no arquivo escolhido pouco depois de se estabelecer. Aponte o arquivo para um caminho acompanhado por um repositório de dotfiles, e Importar configurações o lê em qualquer lugar."
     )
 
     static let tr = BackupFeatureStrings(
@@ -111,7 +127,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "Mevcut ayarlar dosyadakilerle değiştirilir ve uygulama yeniden başlar. Bu Mac’te başka hiçbir şeye dokunulmaz.",
         importMissingIslandBody: "Bu yedekte Dynamic Island ayarları yok. Bu Mac’teki ada ayarları korunacak. Diğer Mac’ten kopyalamak için Vorssaint 3.4 veya daha yeni bir sürümle yeniden dışa aktarın. Diğer ayarlar içe aktarılacak ve uygulama yeniden başlayacak.",
         importAction: "İçe aktar ve yeniden başlat",
-        invalidFile: "Bu dosya geçerli bir Vorssaint yedeği değil."
+        invalidFile: "Bu dosya geçerli bir Vorssaint yedeği değil.",
+        autoExportToggle: "Ayarlar değiştiğinde bir dosyaya yaz",
+        autoExportChoose: "Dosya seç…",
+        autoExportCaption: "Bir ayar değişikliği, durduktan kısa süre sonra seçilen dosyaya yazılır. Dosyayı bir dotfiles deposunun izlediği bir yola işaretleyin; Ayarları içe aktar onu her yerde yeniden okur."
     )
 
     static let ru = BackupFeatureStrings(
@@ -125,7 +144,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "Текущие настройки заменяются настройками из файла, и приложение перезапускается. Больше ничего на этом Mac не меняется.",
         importMissingIslandBody: "В этой копии нет настроек Dynamic Island. Настройки на этом Mac сохранятся. Чтобы перенести их с другого Mac, экспортируйте копию из Vorssaint 3.4 или новее. Остальные настройки будут импортированы, затем приложение перезапустится.",
         importAction: "Импортировать и перезапустить",
-        invalidFile: "Этот файл не является корректной резервной копией Vorssaint."
+        invalidFile: "Этот файл не является корректной резервной копией Vorssaint.",
+        autoExportToggle: "Записывать настройки в файл при изменении",
+        autoExportChoose: "Выбрать файл…",
+        autoExportCaption: "Изменение настройки попадает в выбранный файл вскоре после того, как всё уляжется. Укажите для файла путь, отслеживаемый репозиторием dotfiles, и «Импорт настроек» прочитает его где угодно."
     )
 
     static let es = BackupFeatureStrings(
@@ -139,7 +161,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "Los ajustes actuales se sustituyen por los del archivo y la app se reinicia. Nada más cambia en este Mac.",
         importMissingIslandBody: "Esta copia no contiene ajustes de Dynamic Island. Se conservarán los ajustes de esta Mac. Para copiarlos desde la otra Mac, exporta de nuevo con Vorssaint 3.4 o posterior. Se importarán los demás ajustes y la app se reiniciará.",
         importAction: "Importar y reiniciar",
-        invalidFile: "Este archivo no es una copia de seguridad válida de Vorssaint."
+        invalidFile: "Este archivo no es una copia de seguridad válida de Vorssaint.",
+        autoExportToggle: "Escribir los ajustes en un archivo cuando cambien",
+        autoExportChoose: "Elegir archivo…",
+        autoExportCaption: "Un cambio de ajustes se escribe en el archivo elegido poco después de asentarse. Apunta el archivo a una ruta que siga un repositorio de dotfiles, e Importar ajustes lo lee en cualquier parte."
     )
 
     static let sk = BackupFeatureStrings(
@@ -153,7 +178,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "Vaše aktuálne nastavenia sa nahradia nastaveniami zo súboru a aplikácia sa reštartuje. Nič iné na tomto Macu sa nezmení.",
         importMissingIslandBody: "Táto záloha neobsahuje nastavenia Dynamic Island. Nastavenia na tomto Macu zostanú zachované. Ak ich chcete preniesť z druhého Macu, exportujte zálohu znova vo Vorssaint 3.4 alebo novšom. Ostatné nastavenia sa importujú a aplikácia sa reštartuje.",
         importAction: "Importovať a reštartovať",
-        invalidFile: "Tento súbor nie je platná záloha Vorssaint."
+        invalidFile: "Tento súbor nie je platná záloha Vorssaint.",
+        autoExportToggle: "Zapisovať nastavenia do súboru pri zmene",
+        autoExportChoose: "Vybrať súbor…",
+        autoExportCaption: "Zmena nastavení sa krátko po skončení zmien zapíše do vybraného súboru. Nastavte pre súbor cestu sledovanú repozitárom dotfiles a Importovať nastavenia si ju prečíta kdekoľvek."
     )
 
     static let de = BackupFeatureStrings(
@@ -167,7 +195,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "Die aktuellen Einstellungen werden durch die der Datei ersetzt und die App startet neu. Sonst ändert sich auf diesem Mac nichts.",
         importMissingIslandBody: "Dieses Backup enthält keine Dynamic-Island-Einstellungen. Die Einstellungen auf diesem Mac bleiben erhalten. Um sie vom anderen Mac zu übernehmen, exportiere erneut mit Vorssaint 3.4 oder neuer. Die übrigen Einstellungen werden importiert und die App startet neu.",
         importAction: "Importieren und neu starten",
-        invalidFile: "Diese Datei ist kein gültiges Vorssaint-Backup."
+        invalidFile: "Diese Datei ist kein gültiges Vorssaint-Backup.",
+        autoExportToggle: "Einstellungen bei Änderung in eine Datei schreiben",
+        autoExportChoose: "Datei wählen…",
+        autoExportCaption: "Eine Änderung landet kurz nach dem Sichfestsetzen in der gewählten Datei. Weise der Datei einen Pfad aus einem dotfiles-Repository zu, und „Einstellungen importieren“ liest sie wieder ein."
     )
 
     static let fr = BackupFeatureStrings(
@@ -181,7 +212,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "Les réglages actuels sont remplacés par ceux du fichier et l’app redémarre. Rien d’autre ne change sur ce Mac.",
         importMissingIslandBody: "Cette sauvegarde ne contient aucun réglage de Dynamic Island. Les réglages de ce Mac seront conservés. Pour les copier depuis l’autre Mac, exportez à nouveau avec Vorssaint 3.4 ou une version ultérieure. Les autres réglages seront importés, puis l’app redémarrera.",
         importAction: "Importer et redémarrer",
-        invalidFile: "Ce fichier n’est pas une sauvegarde Vorssaint valide."
+        invalidFile: "Ce fichier n’est pas une sauvegarde Vorssaint valide.",
+        autoExportToggle: "Écrire les réglages dans un fichier quand ils changent",
+        autoExportChoose: "Choisir un fichier…",
+        autoExportCaption: "Un changement de réglages arrive dans le fichier choisi peu après s’être stabilisé. Désignez pour le fichier un chemin suivi par un dépôt de dotfiles, et Importer les réglages les relit partout."
     )
 
     static let it = BackupFeatureStrings(
@@ -195,7 +229,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "Le impostazioni attuali vengono sostituite da quelle del file e l’app si riavvia. Nient’altro cambia su questo Mac.",
         importMissingIslandBody: "Questo backup non contiene le impostazioni di Dynamic Island. Quelle su questo Mac verranno mantenute. Per copiarle dall’altro Mac, esporta di nuovo con Vorssaint 3.4 o successivo. Le altre impostazioni verranno importate e l’app si riavvierà.",
         importAction: "Importa e riavvia",
-        invalidFile: "Questo file non è un backup Vorssaint valido."
+        invalidFile: "Questo file non è un backup Vorssaint valido.",
+        autoExportToggle: "Scrivi le impostazioni su un file quando cambiano",
+        autoExportChoose: "Scegli file…",
+        autoExportCaption: "Una modifica alle impostazioni arriva nel file scelto poco dopo essersi assestata. Indica per il file un percorso seguito da un repository dotfiles, e Importa impostazioni lo rilegge ovunque."
     )
 
     static let ja = BackupFeatureStrings(
@@ -209,7 +246,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "現在の設定はファイルの内容に置き換えられ、アプリが再起動します。このMacのほかの部分は変わりません。",
         importMissingIslandBody: "このバックアップにはDynamic Islandの設定がありません。このMacの設定は維持されます。別のMacからコピーするには、Vorssaint 3.4以降で再度書き出してください。その他の設定を読み込んだ後、アプリが再起動します。",
         importAction: "読み込んで再起動",
-        invalidFile: "このファイルは有効なVorssaintのバックアップではありません。"
+        invalidFile: "このファイルは有効なVorssaintのバックアップではありません。",
+        autoExportToggle: "設定の変更をファイルに書き出す",
+        autoExportChoose: "ファイルを選択…",
+        autoExportCaption: "設定の変更が収まると、まもなく選択したファイルに書き出されます。dotfilesリポジトリで管理しているパスを指定すれば、設定を読み込むがどこでも同じ設定を復元します。"
     )
 
     static let zhHans = BackupFeatureStrings(
@@ -223,7 +263,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "当前设置将被文件中的设置替换，App 会重启。这台 Mac 上的其他内容不受影响。",
         importMissingIslandBody: "此备份不包含 Dynamic Island 设置。这台 Mac 上的相关设置将保留。要从另一台 Mac 复制这些设置，请使用 Vorssaint 3.4 或更新版本重新导出。其他设置将被导入，然后 App 会重启。",
         importAction: "导入并重启",
-        invalidFile: "该文件不是有效的 Vorssaint 备份。"
+        invalidFile: "该文件不是有效的 Vorssaint 备份。",
+        autoExportToggle: "设置变化时写入文件",
+        autoExportChoose: "选择文件…",
+        autoExportCaption: "设置变化落定后不久，就会写入所选文件。把文件指向 dotfiles 仓库跟踪的路径，导入设置即可在任意位置读回。"
     )
 
     static let zhTW = BackupFeatureStrings(
@@ -237,7 +280,10 @@ extension BackupFeatureStrings {
         importConfirmBody: "目前設定將被檔案中的設定取代,App 會重新啟動。這台 Mac 上的其他內容不受影響。",
         importMissingIslandBody: "此備份不包含 Dynamic Island 設定。這台 Mac 上的相關設定會保留。若要從另一台 Mac 複製這些設定,請使用 Vorssaint 3.4 或較新版本重新匯出。其他設定會匯入,然後 App 會重新啟動。",
         importAction: "匯入並重新啟動",
-        invalidFile: "此檔案不是有效的 Vorssaint 備份。"
+        invalidFile: "此檔案不是有效的 Vorssaint 備份。",
+        autoExportToggle: "設定變更時寫入檔案",
+        autoExportChoose: "選擇檔案…",
+        autoExportCaption: "設定變更落定後不久,便會寫入所選檔案。將檔案指向 dotfiles 儲存庫追蹤的路徑,匯入設定即可在任何位置讀回。"
     )
 
     static let zhHK = BackupFeatureStrings(
@@ -251,6 +297,9 @@ extension BackupFeatureStrings {
         importConfirmBody: "目前設定將被檔案中的設定取代,App 會重新啟動。這台 Mac 上的其他內容不受影響。",
         importMissingIslandBody: "呢份備份冇 Dynamic Island 設定。呢部 Mac 上嘅相關設定會保留。想從另一部 Mac 複製呢啲設定,請用 Vorssaint 3.4 或更新版本重新匯出。其他設定會匯入,之後 App 會重新啟動。",
         importAction: "匯入並重新啟動",
-        invalidFile: "此檔案不是有效嘅 Vorssaint 備份。"
+        invalidFile: "此檔案不是有效嘅 Vorssaint 備份。",
+        autoExportToggle: "設定變更時寫入檔案",
+        autoExportChoose: "揀選檔案…",
+        autoExportCaption: "設定變更落定後冇耐,便會寫入所選檔案。將檔案指向 dotfiles 儲存庫追蹤嘅路徑,匯入設定即可喺任何位置讀返。"
     )
 }
