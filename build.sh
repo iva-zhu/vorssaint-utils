@@ -463,6 +463,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/DiskImageInstaller/DiskImageInstallerSupport.swift
         Sources/Vorssaint/UI/NonModalAlert.swift
         Sources/Vorssaint/Services/Clipboard/ClipboardHistorySupport.swift
+        Sources/Vorssaint/Services/ByteBudgetCache.swift
         Sources/Vorssaint/Services/ThumbnailCache.swift
         Sources/Vorssaint/Core/ColorValue.swift
         Sources/Vorssaint/Services/Clipboard/ClipboardAutoClearSupport.swift

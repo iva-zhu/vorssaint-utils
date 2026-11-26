@@ -88,35 +88,13 @@ enum Downsampler {
 
 /// A byte-budgeted thumbnail cache shared by every consumer that keeps
 /// thumbnails. The budget is per instance — the clipboard keeps 32 MiB and the
-/// window previews 64 MiB — but the accounting, the eviction and the off-main
-/// decode lane are the same code.
+/// window previews 64 MiB — but the accounting, the eviction and the
+/// memory-pressure response are `ByteBudgetCache`, the same policy the icon
+/// caches use. This type adds only the off-main decode lane.
 final class ThumbnailCache<Key: Hashable, Value: AnyObject>: @unchecked Sendable {
-    enum Eviction {
-        /// The cache keeps itself inside its byte budget and count limit,
-        /// dropping the least recently used entries.
-        case automatic
-        /// The owner knows which entries are still useful (a window parked in
-        /// the Stage Manager strip cannot be recaptured), so it chooses the
-        /// victims and the cache only tracks what they cost.
-        case callerDriven
-    }
+    typealias Eviction = ByteBudgetCache<Key, Value>.Eviction
 
-    private struct Entry {
-        let value: Value
-        let cost: Int
-        var stamp: UInt64
-    }
-
-    private let byteBudget: Int
-    private let countLimit: Int
-    private let eviction: Eviction
-    private let lock = NSLock()
-    private var entries: [Key: Entry] = [:]
-    private var storedCost = 0
-    private var clock: UInt64 = 0
-    /// Held by the cache, so the subscription lives exactly as long as the
-    /// owner's cache does. Each cache has its own; nothing is global.
-    private var pressureMonitor: MemoryPressureMonitor?
+    private let store: ByteBudgetCache<Key, Value>
     /// Decodes two at a time at most: a burst of new rows must not hold dozens
     /// of full-size images in memory at once, nor saturate every core.
     private let decodeQueue: OperationQueue = {
@@ -128,100 +106,61 @@ final class ThumbnailCache<Key: Hashable, Value: AnyObject>: @unchecked Sendable
     }()
 
     init(byteBudget: Int, countLimit: Int = .max, eviction: Eviction = .automatic) {
-        self.byteBudget = max(0, byteBudget)
-        self.countLimit = max(1, countLimit)
-        self.eviction = eviction
+        store = ByteBudgetCache(byteBudget: byteBudget, countLimit: countLimit, eviction: eviction)
     }
 
     /// The owner opts its instance in. Called once at setup: the monitor is
-    /// retained by this cache, so it stops when the cache goes away.
+    /// retained by the cache, so it stops when the cache goes away.
     func monitorMemoryPressure() {
-        guard pressureMonitor == nil else { return }
-        pressureMonitor = MemoryPressureMonitor { [weak self] level in
-            self?.handleMemoryPressure(level)
-        }
+        store.monitorMemoryPressure()
     }
 
     /// Warning returns half of the budget, critical all of it. The policy is a
     /// plain function so it can be exercised without triggering system pressure.
     func handleMemoryPressure(_ level: MemoryPressureLevel) {
-        switch level {
-        case .warning:
-            trim(toFraction: 0.5)
-        case .critical:
-            removeAll()
-        }
+        store.handleMemoryPressure(level)
     }
 
     /// Drops least recently used entries until the retained bytes fit
     /// `fraction` of the byte budget. A single oversized entry is dropped too,
     /// unlike steady-state eviction: returning memory matters more here.
     func trim(toFraction fraction: Double) {
-        let target = Int(Double(byteBudget) * min(max(fraction, 0), 1))
-        lock.withLock {
-            while storedCost > target, !entries.isEmpty {
-                guard let victim = entries.min(by: { $0.value.stamp < $1.value.stamp })?.key,
-                      let removed = entries.removeValue(forKey: victim)
-                else { break }
-                storedCost -= removed.cost
-            }
-        }
+        store.trim(toFraction: fraction)
     }
 
     /// Bytes currently accounted. Exposed so the bound can be asserted rather
     /// than assumed.
-    var cost: Int { lock.withLock { storedCost } }
+    var cost: Int { store.cost }
 
-    var count: Int { lock.withLock { entries.count } }
+    var count: Int { store.count }
 
-    var keys: Set<Key> { lock.withLock { Set(entries.keys) } }
+    var keys: Set<Key> { store.keys }
 
-    var costs: [Key: Int] { lock.withLock { entries.mapValues(\.cost) } }
+    var costs: [Key: Int] { store.costs }
 
     /// A synchronous lookup that only touches the lock and the dictionary:
     /// a hit never decodes, and a miss never blocks on a decode. Every hit is
     /// recorded, so a pressure trim drops the least recently used entries for
     /// caller-driven caches too.
     func value(for key: Key) -> Value? {
-        lock.withLock {
-            guard var entry = entries[key] else { return nil }
-            clock += 1
-            entry.stamp = clock
-            entries[key] = entry
-            return entry.value
-        }
+        store.value(for: key)
     }
 
-    func contains(_ key: Key) -> Bool { lock.withLock { entries[key] != nil } }
+    func contains(_ key: Key) -> Bool { store.contains(key) }
 
-    func cost(for key: Key) -> Int? { lock.withLock { entries[key]?.cost } }
+    func cost(for key: Key) -> Int? { store.cost(for: key) }
 
     func insert(_ value: Value, cost: Int, for key: Key) {
-        let cost = max(0, cost)
-        lock.withLock {
-            if let previous = entries.removeValue(forKey: key) { storedCost -= previous.cost }
-            clock += 1
-            entries[key] = Entry(value: value, cost: cost, stamp: clock)
-            storedCost += cost
-            guard eviction == .automatic else { return }
-            evictIfNeeded()
-        }
+        store.insert(value, cost: cost, for: key)
     }
 
     @discardableResult
     func removeValue(for key: Key) -> Value? {
-        lock.withLock {
-            guard let removed = entries.removeValue(forKey: key) else { return nil }
-            storedCost -= removed.cost
-            return removed.value
-        }
+        store.removeValue(for: key)
     }
 
     func removeAll() {
-        lock.withLock {
-            entries.removeAll()
-            storedCost = 0
-        }
+        store.removeAll()
     }
 
     /// A hit answers at once. A miss runs `load` on the shared decode lane; a
@@ -230,7 +169,7 @@ final class ThumbnailCache<Key: Hashable, Value: AnyObject>: @unchecked Sendable
     /// caller's thread.
     func value(for key: Key,
                load: @escaping () -> (value: Value, cost: Int)?) async -> Value? {
-        if let cached = value(for: key) { return cached }
+        if let cached = store.value(for: key) { return cached }
         let request = DecodeRequest()
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Value?, Never>) in
@@ -243,24 +182,12 @@ final class ThumbnailCache<Key: Hashable, Value: AnyObject>: @unchecked Sendable
                         continuation.resume(returning: nil)
                         return
                     }
-                    self.insert(loaded.value, cost: loaded.cost, for: key)
+                    self.store.insert(loaded.value, cost: loaded.cost, for: key)
                     continuation.resume(returning: loaded.value)
                 }
             }
         } onCancel: {
             request.cancel()
-        }
-    }
-
-    /// Must be called with `lock` held.
-    private func evictIfNeeded() {
-        // One entry always stays: an oversized thumbnail is still better than
-        // re-decoding it on every draw.
-        while entries.count > 1, entries.count > countLimit || storedCost > byteBudget {
-            guard let victim = entries.min(by: { $0.value.stamp < $1.value.stamp })?.key,
-                  let removed = entries.removeValue(forKey: victim)
-            else { break }
-            storedCost -= removed.cost
         }
     }
 
@@ -270,35 +197,5 @@ final class ThumbnailCache<Key: Hashable, Value: AnyObject>: @unchecked Sendable
 
         var isCancelled: Bool { lock.withLock { cancelled } }
         func cancel() { lock.withLock { cancelled = true } }
-    }
-}
-
-enum MemoryPressureLevel {
-    case warning
-    case critical
-}
-
-/// A memory-pressure subscription with an explicit lifetime: whoever creates it
-/// keeps it, and releasing it cancels the source. Not a singleton, so a cache
-/// only gives memory back while its own feature is alive. The source runs on its
-/// own serial queue, and every change it makes goes through the cache's lock.
-final class MemoryPressureMonitor {
-    private let source: DispatchSourceMemoryPressure
-
-    init(queue: DispatchQueue = DispatchQueue(label: "com.vorssaint.utils.memory-pressure",
-                                              qos: .utility),
-         handler: @escaping (MemoryPressureLevel) -> Void) {
-        let source = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical],
-                                                             queue: queue)
-        self.source = source
-        source.setEventHandler { [weak source] in
-            guard let source else { return }
-            handler(source.data.contains(.critical) ? .critical : .warning)
-        }
-        source.resume()
-    }
-
-    deinit {
-        source.cancel()
     }
 }

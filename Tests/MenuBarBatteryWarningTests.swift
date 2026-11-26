@@ -22,7 +22,8 @@ enum MenuBarBatteryWarningTests {
         typealias ReviewDefaults = MenuBarBatteryWarningTests.ReviewDefaults
         typealias MenuBarMetricSpacing = MenuBarBatteryWarningTests.MenuBarMetricSpacing
         typealias MenuBarMetricAppearance = MenuBarBatteryWarningTests.MenuBarMetricAppearance
-        static let blockImageCache = NSCache<NSString, NSImage>()
+        static let blockImageCache = ByteBudgetCache<String, NSImage>(byteBudget: 8 * 1024 * 1024,
+                                                                     countLimit: 300)
         static let legacyBlockAttachmentNudge: CGFloat = 0
         static var style = MenuBarBlockStyle.dense
         static var overrideSegments: [MenuBarSegment]?
@@ -51,7 +52,7 @@ enum MenuBarBatteryWarningTests {
             defaults.removePersistentDomain(forName: domain)
             ReviewDefaults.current = nil
             Renderer.overrideSegments = nil
-            Renderer.blockImageCache.removeAllObjects()
+            Renderer.blockImageCache.removeAll()
         }
         defaults.set(true, forKey: DefaultsKey.notchLowBatteryTint)
         defaults.set(true, forKey: DefaultsKey.notchLowBatteryEarly)

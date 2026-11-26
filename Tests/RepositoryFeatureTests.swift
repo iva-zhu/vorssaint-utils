@@ -2207,5 +2207,26 @@ enum RepositoryFeatureTests {
         suite.expect(!SecureInputSupport.shouldPoll(observingSurfaceCount: 0, windowIsOpen: false),
                "neither gate alone is enough")
 
+        // MARK: Shared icon cache policy
+
+        // The two hand-rolled icon caches keep the shared accounting, so a
+        // memory regression has one policy to inspect, not three. Their
+        // budgets and count limits are unchanged.
+        for (path, label) in [
+            ("Sources/Vorssaint/UI/CommandBar/CommandBarView.swift", "the command bar icon cache"),
+            ("Sources/Vorssaint/App/MenuBarRenderer.swift", "the menu bar block cache"),
+        ] {
+            let source = repository.source(at: path)
+            suite.expect(source.contains("ByteBudgetCache<String, NSImage>"),
+                         "\(label) stores through the shared byte-budget cache")
+            suite.expect(source.contains("byteBudget: 8 * 1024 * 1024")
+                         && source.contains("countLimit: 300"),
+                         "\(label) keeps its 8 MiB and 300 entry budgets")
+            suite.expect(source.contains("cache.monitorMemoryPressure()"),
+                         "\(label) gives memory back under system pressure")
+            suite.expect(!source.contains("NSCache<NSString, NSImage>"),
+                         "\(label) no longer carries a private eviction policy")
+        }
+
     }
 }

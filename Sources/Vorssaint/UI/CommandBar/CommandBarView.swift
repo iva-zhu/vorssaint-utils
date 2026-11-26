@@ -1237,23 +1237,25 @@ struct CommandBarView: View {
 /// of those held at full size would cost more memory than the rest of the app
 /// put together. The rows draw at 28 points, so 64 pixels is already more
 /// than any display needs.
+///
+/// The cache itself is the shared `ByteBudgetCache`: the same 8 MiB and 300
+/// entry ceiling as before, now enforced by the same LRU accounting and
+/// memory-pressure response as the thumbnail caches.
 enum CommandBarIconCache {
     private static let side: CGFloat = 64
 
-    private static let cache: NSCache<NSString, NSImage> = {
-        let cache = NSCache<NSString, NSImage>()
-        cache.countLimit = 300
-        // NSCache alone only sheds under system memory pressure, which is too
-        // late; the cost ceiling keeps the whole set inside a few megabytes.
-        cache.totalCostLimit = 8 * 1024 * 1024
+    private static let cache: ByteBudgetCache<String, NSImage> = {
+        let cache = ByteBudgetCache<String, NSImage>(byteBudget: 8 * 1024 * 1024,
+                                                     countLimit: 300)
+        cache.monitorMemoryPressure()
         return cache
     }()
 
     static func icon(forPath path: String) -> NSImage {
-        if let cached = cache.object(forKey: path as NSString) { return cached }
+        if let cached = cache.value(for: path) { return cached }
         let full = NSWorkspace.shared.icon(forFile: path)
         let small = downsampled(full)
-        cache.setObject(small, forKey: path as NSString, cost: Int(side * side * 4))
+        cache.insert(small, cost: Int(side * side * 4), for: path)
         return small
     }
 

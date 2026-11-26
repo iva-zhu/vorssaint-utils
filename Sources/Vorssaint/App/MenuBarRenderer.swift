@@ -229,12 +229,13 @@ enum MenuBarRenderer {
         "↓999Kb", "↑999Kb", "R8888B", "W8888B",
         "↓8888M", "↑8888M", "R8888M", "W8888M",
     ]
-    private static let blockImageCache: NSCache<NSString, NSImage> = {
-        let cache = NSCache<NSString, NSImage>()
-        cache.countLimit = 300
+    private static let blockImageCache: ByteBudgetCache<String, NSImage> = {
+        let cache = ByteBudgetCache<String, NSImage>(byteBudget: 8 * 1024 * 1024,
+                                                     countLimit: 300)
         // The keys embed live metric values, so continuously changing numbers
-        // mint new entries all day; the byte ceiling keeps that harmless.
-        cache.totalCostLimit = 8 * 1024 * 1024
+        // mint new entries all day; the shared byte ceiling and its
+        // memory-pressure response keep that harmless.
+        cache.monitorMemoryPressure()
         return cache
     }()
 
@@ -886,8 +887,8 @@ enum MenuBarRenderer {
             ? MenuBarSpacingSupport.compactReserve(label: label, value: value)
             : reservedValue
         let pressureKey = pressure.map(String.init(describing:)) ?? "none"
-        let cacheKey = "metric|\(label)|\(value)|\(minimumValue)|\(style)|\(pressureKey)|\(warning)" as NSString
-        if let cached = blockImageCache.object(forKey: cacheKey) { return cached }
+        let cacheKey = "metric|\(label)|\(value)|\(minimumValue)|\(style)|\(pressureKey)|\(warning)"
+        if let cached = blockImageCache.value(for: cacheKey) { return cached }
 
         let labelFont = NSFont.systemFont(ofSize: style == .readable ? 7.2 : 6.6, weight: .medium)
         let valueFont = NSFont.monospacedDigitSystemFont(ofSize: style == .readable ? 13.0 : 12.0,
@@ -928,7 +929,7 @@ enum MenuBarRenderer {
             return true
         }
         image.isTemplate = false
-        blockImageCache.setObject(image, forKey: cacheKey, cost: blockImageCost(image))
+        blockImageCache.insert(image, cost: blockImageCost(image), for: cacheKey)
         return image
     }
 
@@ -943,8 +944,8 @@ enum MenuBarRenderer {
         } ?? "missing"
         let pressureKey = pressure.map(String.init(describing:)) ?? "none"
         let levelKey = fillLevel.map(String.init) ?? "missing"
-        let cacheKey = "usageBar|\(label)|\(levelKey)|\(fillColorHex)|\(style)|\(pressureKey)" as NSString
-        if let cached = blockImageCache.object(forKey: cacheKey) { return cached }
+        let cacheKey = "usageBar|\(label)|\(levelKey)|\(fillColorHex)|\(style)|\(pressureKey)"
+        if let cached = blockImageCache.value(for: cacheKey) { return cached }
 
         let size = usageBarSize(style: style, showsPressure: pressure != nil)
         let labelFont = NSFont.systemFont(ofSize: style == .readable ? 6.5 : 6.1, weight: .semibold)
@@ -1011,7 +1012,7 @@ enum MenuBarRenderer {
             return true
         }
         image.isTemplate = false
-        blockImageCache.setObject(image, forKey: cacheKey, cost: blockImageCost(image))
+        blockImageCache.insert(image, cost: blockImageCost(image), for: cacheKey)
         return image
     }
 
@@ -1026,8 +1027,8 @@ enum MenuBarRenderer {
 
     private static func networkBlockImage(down: String, up: String, style: MenuBarBlockStyle) -> NSImage {
         let uploadFirst = UserDefaults.standard.bool(forKey: DefaultsKey.menuBarNetworkUploadFirst)
-        let cacheKey = "network|\(down)|\(up)|\(style)|\(uploadFirst)" as NSString
-        if let cached = blockImageCache.object(forKey: cacheKey) { return cached }
+        let cacheKey = "network|\(down)|\(up)|\(style)|\(uploadFirst)"
+        if let cached = blockImageCache.value(for: cacheKey) { return cached }
 
         let lines = uploadFirst ? ["↑\(up)", "↓\(down)"] : ["↓\(down)", "↑\(up)"]
         return stackedRatesImage(lines: lines,
@@ -1039,8 +1040,8 @@ enum MenuBarRenderer {
     private static func diskActivityBlockImage(read: String,
                                                write: String,
                                                style: MenuBarBlockStyle) -> NSImage {
-        let cacheKey = "diskActivity|\(read)|\(write)|\(style)" as NSString
-        if let cached = blockImageCache.object(forKey: cacheKey) { return cached }
+        let cacheKey = "diskActivity|\(read)|\(write)|\(style)"
+        if let cached = blockImageCache.value(for: cacheKey) { return cached }
 
         return stackedRatesImage(lines: ["R\(read)", "W\(write)"],
                                  reservedLines: ["R000B", "W000B"],
@@ -1050,7 +1051,7 @@ enum MenuBarRenderer {
 
     private static func stackedRatesImage(lines: [String],
                                           reservedLines: [String],
-                                          cacheKey: NSString,
+                                          cacheKey: String,
                                           style: MenuBarBlockStyle) -> NSImage {
         let font = NSFont.monospacedSystemFont(ofSize: networkBlockFontSize(style: style),
                                                weight: .semibold)
@@ -1073,7 +1074,7 @@ enum MenuBarRenderer {
             return true
         }
         image.isTemplate = false
-        blockImageCache.setObject(image, forKey: cacheKey, cost: blockImageCost(image))
+        blockImageCache.insert(image, cost: blockImageCost(image), for: cacheKey)
         return image
     }
 
@@ -1091,8 +1092,8 @@ enum MenuBarRenderer {
                                           warning: BatteryWarning,
                                           style: MenuBarBlockStyle) -> NSImage {
         let clampedPercent = max(0, min(100, percent))
-        let cacheKey = "battery|\(clampedPercent)|\(isCharging)|\(externalConnected)|\(warning)|\(style)" as NSString
-        if let cached = blockImageCache.object(forKey: cacheKey) { return cached }
+        let cacheKey = "battery|\(clampedPercent)|\(isCharging)|\(externalConnected)|\(warning)|\(style)"
+        if let cached = blockImageCache.value(for: cacheKey) { return cached }
 
         let symbolName = BatteryPowerSupport.menuBarSymbol(percent: percent,
                                                            isCharging: isCharging,
@@ -1138,7 +1139,7 @@ enum MenuBarRenderer {
             return true
         }
         image.isTemplate = false
-        blockImageCache.setObject(image, forKey: cacheKey, cost: blockImageCost(image))
+        blockImageCache.insert(image, cost: blockImageCost(image), for: cacheKey)
         return image
     }
 
